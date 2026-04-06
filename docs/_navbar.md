@@ -1,0 +1,5 @@
+- [Home](/)
+- [Getting Started](guides/installation.md)
+- [API](api/threeview.md)
+- [Examples](guides/quickstart.md)
+- <a href="https://github.com/eftech93/dioxus-three" target="_blank">GitHub</a>

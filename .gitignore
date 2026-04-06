@@ -1,0 +1,56 @@
+# Rust
+target/
+**/*.rs.bk
+*.pdb
+Cargo.lock
+
+# Dioxus
+.dioxus/
+dist/
+assets/gen/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+.nfs*
+
+# IDEs and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.vs/
+
+# Debug
+*.log
+npm-debug.log*
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Build artifacts
+/build/
+/out/
+/release/
+/debug/
+
+# Coverage
+*.profraw
+*.profdata
+coverage/
+
+# Documentation build
+docs/_book/
+docs/node_modules/

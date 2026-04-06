@@ -1,0 +1,648 @@
+//! Dioxus Three - A Three.js component for Dioxus
+//!
+//! Provides a simple component for embedding interactive 3D scenes
+//! using Three.js within Dioxus Desktop applications.
+//!
+//! Supports multiple 3D formats: OBJ, FBX, GLTF, GLB, STL, PLY, and more.
+//! Also supports custom GLSL shaders for advanced visual effects.
+
+use dioxus::prelude::*;
+use std::collections::HashMap;
+
+/// Custom shader configuration
+#[derive(Clone, PartialEq, Debug, Default)]
+pub struct ShaderConfig {
+    /// Vertex shader GLSL code (optional - uses default if not provided)
+    pub vertex_shader: Option<String>,
+    /// Fragment shader GLSL code (optional - uses default if not provided)
+    pub fragment_shader: Option<String>,
+    /// Uniform values to pass to shaders (float values)
+    pub uniforms: HashMap<String, f32>,
+    /// Time-based animation (automatically sets `u_time` uniform)
+    pub animated: bool,
+}
+
+/// Built-in shader presets
+#[derive(Clone, PartialEq, Debug)]
+pub enum ShaderPreset {
+    /// No custom shader (default StandardMaterial)
+    None,
+    /// Animated gradient
+    Gradient,
+    /// Water/wave effect
+    Water,
+    /// Hologram effect
+    Hologram,
+    /// Toon/cel shading
+    Toon,
+    /// Heat map visualization
+    Heatmap,
+    /// Custom shader with provided config
+    Custom(ShaderConfig),
+}
+
+/// 3D model format types
+#[derive(Clone, PartialEq, Debug)]
+pub enum ModelFormat {
+    /// Wavefront OBJ format
+    Obj,
+    /// Autodesk FBX format
+    Fbx,
+    /// glTF 2.0 format (JSON)
+    Gltf,
+    /// glTF 2.0 binary format
+    Glb,
+    /// STL format (StereoLithography)
+    Stl,
+    /// Stanford PLY format
+    Ply,
+    /// Collada DAE format
+    Dae,
+    /// Three.js JSON format
+    Json,
+    /// Default cube (no file)
+    Cube,
+}
+
+impl ModelFormat {
+    /// Get the format identifier string
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ModelFormat::Obj => "obj",
+            ModelFormat::Fbx => "fbx",
+            ModelFormat::Gltf => "gltf",
+            ModelFormat::Glb => "glb",
+            ModelFormat::Stl => "stl",
+            ModelFormat::Ply => "ply",
+            ModelFormat::Dae => "dae",
+            ModelFormat::Json => "json",
+            ModelFormat::Cube => "cube",
+        }
+    }
+    
+    fn loader_js(&self) -> &'static str {
+        match self {
+            ModelFormat::Obj => "OBJLoader",
+            ModelFormat::Fbx => "FBXLoader",
+            ModelFormat::Gltf | ModelFormat::Glb => "GLTFLoader",
+            ModelFormat::Stl => "STLLoader",
+            ModelFormat::Ply => "PLYLoader",
+            ModelFormat::Dae => "ColladaLoader",
+            ModelFormat::Json => "ObjectLoader",
+            ModelFormat::Cube => "",
+        }
+    }
+    
+    fn loader_url(&self) -> &'static str {
+        match self {
+            ModelFormat::Obj => "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js",
+            ModelFormat::Fbx => "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js",
+            ModelFormat::Gltf | ModelFormat::Glb => "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js",
+            ModelFormat::Stl => "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js",
+            ModelFormat::Ply => "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/PLYLoader.js",
+            ModelFormat::Dae => "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/ColladaLoader.js",
+            ModelFormat::Json => "",
+            ModelFormat::Cube => "",
+        }
+    }
+    
+    /// Get additional dependency URLs required by this loader
+    fn extra_scripts(&self) -> Vec<&'static str> {
+        match self {
+            // FBXLoader requires fflate for decompression
+            ModelFormat::Fbx => vec!["https://cdn.jsdelivr.net/npm/fflate@0.8.0/umd/index.js"],
+            _ => vec![],
+        }
+    }
+}
+
+/// Properties for the ThreeView component
+#[derive(Props, Clone, PartialEq)]
+pub struct ThreeViewProps {
+    /// Model file path or URL (optional - uses cube if not provided)
+    #[props(default = None)]
+    pub model_url: Option<String>,
+    /// Model format
+    #[props(default = ModelFormat::Cube)]
+    pub format: ModelFormat,
+    /// Model position X
+    #[props(default = 0.0)]
+    pub pos_x: f32,
+    /// Model position Y
+    #[props(default = 0.0)]
+    pub pos_y: f32,
+    /// Model position Z
+    #[props(default = 0.0)]
+    pub pos_z: f32,
+    /// Model rotation X (degrees)
+    #[props(default = 0.0)]
+    pub rot_x: f32,
+    /// Model rotation Y (degrees)
+    #[props(default = 0.0)]
+    pub rot_y: f32,
+    /// Model rotation Z (degrees)
+    #[props(default = 0.0)]
+    pub rot_z: f32,
+    /// Model scale
+    #[props(default = 1.0)]
+    pub scale: f32,
+    /// Model color/material (hex string like "#ff6b6b")
+    #[props(default = "#ff6b6b".to_string())]
+    pub color: String,
+    /// Auto-center the model
+    #[props(default = true)]
+    pub auto_center: bool,
+    /// Auto-scale to fit viewport
+    #[props(default = false)]
+    pub auto_scale: bool,
+    /// Camera position X
+    #[props(default = 5.0)]
+    pub cam_x: f32,
+    /// Camera position Y
+    #[props(default = 5.0)]
+    pub cam_y: f32,
+    /// Camera position Z
+    #[props(default = 5.0)]
+    pub cam_z: f32,
+    /// Camera target X
+    #[props(default = 0.0)]
+    pub target_x: f32,
+    /// Camera target Y
+    #[props(default = 0.0)]
+    pub target_y: f32,
+    /// Camera target Z
+    #[props(default = 0.0)]
+    pub target_z: f32,
+    /// Auto-rotate the model
+    #[props(default = true)]
+    pub auto_rotate: bool,
+    /// Auto-rotation speed
+    #[props(default = 1.0)]
+    pub rot_speed: f32,
+    /// Show grid helper
+    #[props(default = true)]
+    pub show_grid: bool,
+    /// Show axes helper
+    #[props(default = true)]
+    pub show_axes: bool,
+    /// Background color
+    #[props(default = "#1a1a2e".to_string())]
+    pub background: String,
+    /// Additional CSS class for the container
+    #[props(default = String::new())]
+    pub class: String,
+    /// Enable shadows
+    #[props(default = true)]
+    pub shadows: bool,
+    /// Wireframe mode
+    #[props(default = false)]
+    pub wireframe: bool,
+    /// Shader preset or custom shader
+    #[props(default = ShaderPreset::None)]
+    pub shader: ShaderPreset,
+}
+
+impl ShaderPreset {
+    /// Get the vertex shader code for this preset
+    fn vertex_shader(&self) -> Option<String> {
+        match self {
+            ShaderPreset::None => None,
+            ShaderPreset::Gradient => Some(include_str!("shaders/gradient.vert").to_string()),
+            ShaderPreset::Water => Some(include_str!("shaders/water.vert").to_string()),
+            ShaderPreset::Hologram => Some(include_str!("shaders/hologram.vert").to_string()),
+            ShaderPreset::Toon => Some(include_str!("shaders/toon.vert").to_string()),
+            ShaderPreset::Heatmap => Some(include_str!("shaders/heatmap.vert").to_string()),
+            ShaderPreset::Custom(config) => config.vertex_shader.clone(),
+        }
+    }
+    
+    /// Get the fragment shader code for this preset
+    fn fragment_shader(&self) -> Option<String> {
+        match self {
+            ShaderPreset::None => None,
+            ShaderPreset::Gradient => Some(include_str!("shaders/gradient.frag").to_string()),
+            ShaderPreset::Water => Some(include_str!("shaders/water.frag").to_string()),
+            ShaderPreset::Hologram => Some(include_str!("shaders/hologram.frag").to_string()),
+            ShaderPreset::Toon => Some(include_str!("shaders/toon.frag").to_string()),
+            ShaderPreset::Heatmap => Some(include_str!("shaders/heatmap.frag").to_string()),
+            ShaderPreset::Custom(config) => config.fragment_shader.clone(),
+        }
+    }
+    
+    /// Check if this shader uses time animation
+    fn is_animated(&self) -> bool {
+        match self {
+            ShaderPreset::None => false,
+            ShaderPreset::Gradient | ShaderPreset::Water | ShaderPreset::Hologram => true,
+            ShaderPreset::Custom(config) => config.animated,
+            _ => false,
+        }
+    }
+}
+
+/// A Three.js 3D viewer component for Dioxus
+#[component]
+pub fn ThreeView(props: ThreeViewProps) -> Element {
+    let html = generate_three_js_html(&props);
+    
+    rsx! {
+        iframe {
+            class: "{props.class}",
+            style: "width: 100%; height: 100%; border: none;",
+            srcdoc: "{html}",
+        }
+    }
+}
+
+/// Generate the HTML with embedded Three.js
+fn generate_three_js_html(props: &ThreeViewProps) -> String {
+    let rot_x_rad = props.rot_x.to_radians();
+    let rot_y_rad = props.rot_y.to_radians();
+    let rot_z_rad = props.rot_z.to_radians();
+    
+    let loader_url = props.format.loader_url();
+    let loader_class = props.format.loader_js();
+    let format_str = props.format.as_str();
+    let model_url = props.model_url.clone().unwrap_or_default();
+    let has_model = !model_url.is_empty() && props.format != ModelFormat::Cube;
+    
+    // Build loader script tags (main loader + any extra dependencies)
+    let loader_script = if has_model && !loader_url.is_empty() {
+        let extra_scripts = props.format.extra_scripts();
+        let mut scripts: Vec<String> = extra_scripts.iter()
+            .map(|url| format!(r#"<script src="{}"></script>"#, url))
+            .collect();
+        scripts.push(format!(r#"<script src="{}"></script>"#, loader_url));
+        scripts.join("\n    ")
+    } else {
+        String::new()
+    };
+    
+    // Build shader code if needed
+    let (shader_material_code, shader_uniforms, _shader_animated) = build_shader_code(&props.shader);
+    
+    // Build the HTML
+    let html = format!(
+        r##"<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        html, body {{ width: 100%; height: 100%; overflow: hidden; background: {bg}; }}
+        #canvas-container {{ width: 100%; height: 100%; }}
+        canvas {{ display: block; }}
+        #loading {{ 
+            position: absolute; 
+            top: 50%; 
+            left: 50%; 
+            transform: translate(-50%, -50%); 
+            color: white; 
+            font-family: sans-serif;
+            font-size: 14px;
+        }}
+        #error {{
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #ff6b6b;
+            font-family: sans-serif;
+            font-size: 14px;
+            text-align: center;
+            display: none;
+        }}
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+    <div id="loading">Loading 3D model...</div>
+    <div id="error"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    {loader_script}
+    <script>
+        console.log("Dioxus Three: Initializing ({fmt})...");
+        
+        const container = document.getElementById('canvas-container');
+        const loadingEl = document.getElementById('loading');
+        const errorEl = document.getElementById('error');
+        const width = container.clientWidth || window.innerWidth;
+        const height = container.clientHeight || window.innerHeight;
+        
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color('{bg}');
+        
+        const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
+        camera.position.set({cam_x}, {cam_y}, {cam_z});
+        camera.lookAt({target_x}, {target_y}, {target_z});
+        
+        const renderer = new THREE.WebGLRenderer({{ antialias: true }});
+        renderer.setSize(width, height);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.shadowMap.enabled = {shadows};
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.appendChild(renderer.domElement);
+        
+        // Brighter ambient light for better material visibility
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+        
+        // Main directional light (sun)
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+        dirLight.position.set(10, 20, 10);
+        dirLight.castShadow = {shadows};
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        scene.add(dirLight);
+        
+        // Fill light from opposite side
+        const fillLight = new THREE.DirectionalLight(0xffffff, 0.4);
+        fillLight.position.set(-10, 10, -10);
+        scene.add(fillLight);
+        
+        // Back light for rim lighting
+        const backLight = new THREE.DirectionalLight(0xffffff, 0.3);
+        backLight.position.set(0, 5, -10);
+        scene.add(backLight);
+        
+        if ({show_grid}) {{
+            const gridHelper = new THREE.GridHelper(20, 20, 0x444444, 0x222222);
+            scene.add(gridHelper);
+        }}
+        if ({show_axes}) {{
+            const axesHelper = new THREE.AxesHelper(2);
+            scene.add(axesHelper);
+        }}
+        
+        let model = null;
+        let modelContainer = new THREE.Group();
+        scene.add(modelContainer);
+        
+        let state = {{
+            rotX: {rot_x},
+            rotY: {rot_y},
+            rotZ: {rot_z},
+            scale: {scale},
+            color: "{color}",
+            autoRotate: {auto_rotate},
+            rotSpeed: {rot_speed},
+            wireframe: {wireframe}
+        }};
+        let autoRotY = 0;
+        
+        async function loadModel() {{
+            try {{
+                if (!{has_model} || "{fmt}" === "cube") {{
+                    const geometry = new THREE.BoxGeometry(1, 1, 1);
+                    let material;
+                    {shader_material_code}
+                    if (!material) {{
+                        material = new THREE.MeshStandardMaterial({{ 
+                            color: state.color,
+                            roughness: 0.5,
+                            metalness: 0.3,
+                            wireframe: state.wireframe
+                        }});
+                    }}
+                    model = new THREE.Mesh(geometry, material);
+                    model.castShadow = true;
+                    model.receiveShadow = true;
+                    modelContainer.add(model);
+                    loadingEl.style.display = 'none';
+                }} else {{
+                    const loader = new THREE.{loader_class}();
+                    const isGeometryLoader = ["STLLoader", "PLYLoader"].includes("{loader_class}");
+                    
+                    loader.load(
+                        "{model_url}",
+                        function (object) {{
+                            loadingEl.style.display = 'none';
+                            
+                            // STLLoader and PLYLoader return BufferGeometry, not Object3D
+                            if (isGeometryLoader) {{
+                                const geometry = object;
+                                // PLY/STL usually don't have built-in materials, use visible material
+                                const material = new THREE.MeshStandardMaterial({{ 
+                                    color: state.color,
+                                    roughness: 0.5,
+                                    metalness: 0.1,
+                                    wireframe: state.wireframe,
+                                    side: THREE.DoubleSide
+                                }});
+                                model = new THREE.Mesh(geometry, material);
+                                model.castShadow = {shadows};
+                                model.receiveShadow = {shadows};
+                            }} else if (object.scene) {{
+                                // GLTF/GLB/DAE loaders return an object with a scene property
+                                model = object.scene;
+                            }} else if (object.dae) {{
+                                // ColladaLoader specific
+                                model = object.scene;
+                            }} else {{
+                                // OBJLoader and FBXLoader return Object3D/Group
+                                model = object;
+                            }}
+                            
+                            // Apply color/wireframe to all meshes
+                            if (!isGeometryLoader) {{
+                                model.traverse(function (child) {{
+                                    if (child.isMesh) {{
+                                        child.castShadow = {shadows};
+                                        child.receiveShadow = {shadows};
+                                        
+                                        // Ensure mesh has a material
+                                        if (!child.material) {{
+                                            child.material = new THREE.MeshStandardMaterial({{
+                                                color: state.color,
+                                                roughness: 0.5,
+                                                metalness: 0.3
+                                            }});
+                                        }}
+                                        
+                                        // Handle material arrays (some models have multiple materials)
+                                        const materials = Array.isArray(child.material) ? child.material : [child.material];
+                                        
+                                        materials.forEach(m => {{
+                                            // Ensure material is visible and responds to light
+                                            if (m.opacity !== undefined && m.opacity < 0.1) m.opacity = 1.0;
+                                            if (m.transparent === true && m.opacity < 0.1) m.transparent = false;
+                                            
+                                            // Apply color override if not default
+                                            if (state.color !== "#ff6b6b" && m.color) {{
+                                                m.color.set(state.color);
+                                            }}
+                                            
+                                            // Apply wireframe setting
+                                            m.wireframe = state.wireframe;
+                                        }});
+                                    }}
+                                }});
+                            }}
+                            
+                            if ({auto_center}) {{
+                                const box = new THREE.Box3().setFromObject(model);
+                                const center = box.getCenter(new THREE.Vector3());
+                                model.position.sub(center);
+                            }}
+                            
+                            if ({auto_scale}) {{
+                                const box = new THREE.Box3().setFromObject(model);
+                                const size = box.getSize(new THREE.Vector3());
+                                const maxDim = Math.max(size.x, size.y, size.z);
+                                if (maxDim > 0) {{
+                                    const s = 2 / maxDim;
+                                    model.scale.setScalar(s);
+                                }}
+                            }}
+                            
+                            modelContainer.add(model);
+                            updateTransform();
+                        }},
+                        function (xhr) {{
+                            const percent = xhr.loaded / xhr.total * 100;
+                            loadingEl.textContent = 'Loading: ' + Math.round(percent) + '%';
+                        }},
+                        function (error) {{
+                            console.error('Error loading model:', error);
+                            loadingEl.style.display = 'none';
+                            errorEl.style.display = 'block';
+                            errorEl.textContent = 'Failed to load model: ' + (error.message || 'Unknown error');
+                            const geometry = new THREE.BoxGeometry(1, 1, 1);
+                            const material = new THREE.MeshStandardMaterial({{ color: 0xff6b6b }});
+                            model = new THREE.Mesh(geometry, material);
+                            modelContainer.add(model);
+                        }}
+                    );
+                }}
+            }} catch (e) {{
+                console.error('Error:', e);
+                loadingEl.style.display = 'none';
+                errorEl.style.display = 'block';
+                errorEl.textContent = 'Error: ' + e.message;
+            }}
+        }}
+        
+        function updateTransform() {{
+            if (!modelContainer) return;
+            modelContainer.position.set({pos_x}, {pos_y}, {pos_z});
+            modelContainer.scale.setScalar(state.scale);
+            if (!state.autoRotate) {{
+                modelContainer.rotation.set(state.rotX, state.rotY, state.rotZ);
+            }} else {{
+                modelContainer.rotation.x = state.rotX;
+                modelContainer.rotation.z = state.rotZ;
+            }}
+            modelContainer.traverse(function (child) {{
+                if (child.isMesh && child.material) {{
+                    child.material.wireframe = state.wireframe;
+                }}
+            }});
+        }}
+        
+        window.updateThreeView = function(params) {{
+            state = {{ ...state, ...params }};
+            if (params.camX !== undefined) camera.position.set(state.camX, state.camY, state.camZ);
+            if (params.targetX !== undefined) camera.lookAt(state.targetX, state.targetY, state.targetZ);
+            updateTransform();
+        }};
+        
+        function animate() {{
+            requestAnimationFrame(animate);
+            if (state.autoRotate && modelContainer) {{
+                autoRotY += state.rotSpeed * 0.01;
+                modelContainer.rotation.y = state.rotY + autoRotY;
+            }}
+            {shader_uniforms}
+            renderer.render(scene, camera);
+        }}
+        
+        window.addEventListener('resize', () => {{
+            const w = container.clientWidth || window.innerWidth;
+            const h = container.clientHeight || window.innerHeight;
+            camera.aspect = w / h;
+            camera.updateProjectionMatrix();
+            renderer.setSize(w, h);
+        }});
+        
+        loadModel();
+        updateTransform();
+        animate();
+        console.log("Dioxus Three: Running");
+    </script>
+</body>
+</html>"##,
+        bg = props.background,
+        loader_script = loader_script,
+        fmt = format_str,
+        cam_x = props.cam_x,
+        cam_y = props.cam_y,
+        cam_z = props.cam_z,
+        target_x = props.target_x,
+        target_y = props.target_y,
+        target_z = props.target_z,
+        shadows = props.shadows.to_string().to_lowercase(),
+        show_grid = props.show_grid.to_string().to_lowercase(),
+        show_axes = props.show_axes.to_string().to_lowercase(),
+        rot_x = rot_x_rad,
+        rot_y = rot_y_rad,
+        rot_z = rot_z_rad,
+        scale = props.scale,
+        color = props.color,
+        auto_rotate = props.auto_rotate.to_string().to_lowercase(),
+        rot_speed = props.rot_speed,
+        wireframe = props.wireframe.to_string().to_lowercase(),
+        has_model = has_model.to_string().to_lowercase(),
+        loader_class = loader_class,
+        model_url = model_url,
+        auto_center = props.auto_center.to_string().to_lowercase(),
+        auto_scale = props.auto_scale.to_string().to_lowercase(),
+        pos_x = props.pos_x,
+        pos_y = props.pos_y,
+        pos_z = props.pos_z,
+        shader_material_code = shader_material_code,
+        shader_uniforms = shader_uniforms,
+    );
+    
+    html
+}
+
+/// Build shader code for the Three.js scene
+fn build_shader_code(shader: &ShaderPreset) -> (String, String, bool) {
+    match shader {
+        ShaderPreset::None => (String::new(), String::new(), false),
+        _ => {
+            let vert = shader.vertex_shader().unwrap_or_default();
+            let frag = shader.fragment_shader().unwrap_or_default();
+            let animated = shader.is_animated();
+            
+            let material_code = format!(
+                r#"
+            // Shader material
+            const shaderMaterial = new THREE.ShaderMaterial({{
+                uniforms: {{
+                    u_time: {{ value: 0 }},
+                    u_color: {{ value: new THREE.Color(state.color) }}
+                }},
+                vertexShader: `{}`,
+                fragmentShader: `{}`,
+                transparent: true,
+                side: THREE.DoubleSide
+            }});
+            material = shaderMaterial;
+            "#,
+                vert.replace("`", "\\`"),
+                frag.replace("`", "\\`")
+            );
+            
+            let uniforms_code = r#"
+            // Update shader uniforms
+            if (material && material.uniforms) {
+                material.uniforms.u_time.value = performance.now() * 0.001;
+                material.uniforms.u_color.value.set(state.color);
+            }
+            "#.to_string();
+            
+            (material_code, uniforms_code, animated)
+        }
+    }
+}
