@@ -2,6 +2,7 @@
 name = "dioxus-three-demo"
 version = "0.1.0"
 edition = "2021"
+authors = ["Esteban Puello <eftech93@gmail.com>"]
 
 [dependencies]
 dioxus-three = { path = "../.." }

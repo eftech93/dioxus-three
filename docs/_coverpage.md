@@ -12,4 +12,6 @@
 [Get Started](#dioxus-three-documentation)
 [GitHub](https://github.com/eftech93/dioxus-three)
 
+<small>by **Esteban Puello**</small>
+
 ![color](#1a1a2e)

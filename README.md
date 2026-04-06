@@ -282,6 +282,13 @@ Then use `http://localhost:8080/model.obj` as the URL.
 - Dioxus Desktop 0.5+
 - Internet connection (for Three.js CDN and external models)
 
+## Author
+
+**Esteban Puello** - [eftech93@gmail.com](mailto:eftech93@gmail.com)
+
+- GitHub: [@eftech93](https://github.com/eftech93)
+- Repository: [github.com/eftech93/dioxus-three](https://github.com/eftech93/dioxus-three)
+
 ## License
 
 MIT OR Apache-2.0

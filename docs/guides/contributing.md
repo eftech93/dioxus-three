@@ -2,6 +2,9 @@
 
 We welcome contributions to Dioxus Three!
 
+**Maintainer:** Esteban Puello - [eftech93@gmail.com](mailto:eftech93@gmail.com)  
+**Repository:** [github.com/eftech93/dioxus-three](https://github.com/eftech93/dioxus-three)
+
 ## Development Setup
 
 1. **Clone the repository**

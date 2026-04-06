@@ -2,6 +2,9 @@
 
 All notable changes to Dioxus Three will be documented in this file.
 
+**Maintainer:** Esteban Puello - [eftech93@gmail.com](mailto:eftech93@gmail.com)  
+**Repository:** [github.com/eftech93/dioxus-three](https://github.com/eftech93/dioxus-three)
+
 ## [0.1.0] - 2024-04-05
 
 ### Added
