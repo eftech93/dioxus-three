@@ -116,6 +116,87 @@ impl ModelFormat {
     }
 }
 
+/// Configuration for a single model in a multi-model scene
+#[derive(Clone, PartialEq, Debug)]
+pub struct ModelConfig {
+    /// URL or path to the model file
+    pub url: String,
+    /// Format of the model
+    pub format: ModelFormat,
+    /// Position X
+    pub pos_x: f32,
+    /// Position Y
+    pub pos_y: f32,
+    /// Position Z
+    pub pos_z: f32,
+    /// Rotation X (degrees)
+    pub rot_x: f32,
+    /// Rotation Y (degrees)
+    pub rot_y: f32,
+    /// Rotation Z (degrees)
+    pub rot_z: f32,
+    /// Scale
+    pub scale: f32,
+    /// Color (hex string)
+    pub color: String,
+}
+
+impl Default for ModelConfig {
+    fn default() -> Self {
+        Self {
+            url: String::new(),
+            format: ModelFormat::Cube,
+            pos_x: 0.0,
+            pos_y: 0.0,
+            pos_z: 0.0,
+            rot_x: 0.0,
+            rot_y: 0.0,
+            rot_z: 0.0,
+            scale: 1.0,
+            color: "#ff6b6b".to_string(),
+        }
+    }
+}
+
+impl ModelConfig {
+    /// Create a new model config with just URL and format
+    pub fn new(url: impl Into<String>, format: ModelFormat) -> Self {
+        Self {
+            url: url.into(),
+            format,
+            ..Default::default()
+        }
+    }
+    
+    /// Set position
+    pub fn with_position(mut self, x: f32, y: f32, z: f32) -> Self {
+        self.pos_x = x;
+        self.pos_y = y;
+        self.pos_z = z;
+        self
+    }
+    
+    /// Set rotation
+    pub fn with_rotation(mut self, x: f32, y: f32, z: f32) -> Self {
+        self.rot_x = x;
+        self.rot_y = y;
+        self.rot_z = z;
+        self
+    }
+    
+    /// Set scale
+    pub fn with_scale(mut self, scale: f32) -> Self {
+        self.scale = scale;
+        self
+    }
+    
+    /// Set color
+    pub fn with_color(mut self, color: impl Into<String>) -> Self {
+        self.color = color.into();
+        self
+    }
+}
+
 /// Properties for the ThreeView component
 #[derive(Props, Clone, PartialEq)]
 pub struct ThreeViewProps {
@@ -149,6 +230,9 @@ pub struct ThreeViewProps {
     /// Model color/material (hex string like "#ff6b6b")
     #[props(default = "#ff6b6b".to_string())]
     pub color: String,
+    /// Multiple models to load (optional - if set, model_url/format are ignored)
+    #[props(default = Vec::new())]
+    pub models: Vec<ModelConfig>,
     /// Auto-center the model
     #[props(default = true)]
     pub auto_center: bool,
@@ -254,28 +338,169 @@ pub fn ThreeView(props: ThreeViewProps) -> Element {
     }
 }
 
+/// Build loader scripts for multiple models
+fn build_loader_scripts_for_models(models: &[ModelConfig]) -> String {
+    let mut scripts: Vec<String> = vec![];
+    let mut seen_formats: Vec<ModelFormat> = vec![];
+    
+    for model in models {
+        if seen_formats.contains(&model.format) {
+            continue;
+        }
+        seen_formats.push(model.format.clone());
+        
+        let loader_url = model.format.loader_url();
+        if loader_url.is_empty() {
+            continue;
+        }
+        
+        for extra in model.format.extra_scripts() {
+            let script = format!(r#"<script src="{}"></script>"#, extra);
+            if !scripts.contains(&script) {
+                scripts.push(script);
+            }
+        }
+        
+        scripts.push(format!(r#"<script src="{}"></script>"#, loader_url));
+    }
+    
+    scripts.join("\n    ")
+}
+
+/// Build loader scripts for single model
+fn build_loader_scripts_single(format: &ModelFormat, model_url: &Option<String>) -> String {
+    let url = model_url.clone().unwrap_or_default();
+    let has_model = !url.is_empty() && *format != ModelFormat::Cube;
+    let loader_url = format.loader_url();
+    
+    if !has_model || loader_url.is_empty() {
+        return String::new();
+    }
+    
+    let mut scripts: Vec<String> = format.extra_scripts()
+        .iter()
+        .map(|url| format!(r#"<script src="{}"></script>"#, url))
+        .collect();
+    
+    scripts.push(format!(r#"<script src="{}"></script>"#, loader_url));
+    scripts.join("\n    ")
+}
+
+/// Build JavaScript code for loading multiple models
+fn build_multi_model_loading(models: &[ModelConfig], shadows: bool) -> String {
+    let shadows_str = shadows.to_string().to_lowercase();
+    
+    let load_calls: Vec<String> = models.iter().enumerate().map(|(idx, model)| {
+        let loader_class = model.format.loader_js();
+        let is_geometry_loader = matches!(model.format, ModelFormat::Stl | ModelFormat::Ply);
+        let url = &model.url;
+        let pos_x = model.pos_x;
+        let pos_y = model.pos_y;
+        let pos_z = model.pos_z;
+        let rot_x = model.rot_x.to_radians();
+        let rot_y = model.rot_y.to_radians();
+        let rot_z = model.rot_z.to_radians();
+        let scale = model.scale;
+        let color = &model.color;
+        let default_color = "#ff6b6b";
+        
+        if model.format == ModelFormat::Cube {
+            format!(
+                r#"(function() {{ const geometry = new THREE.BoxGeometry(1, 1, 1); const material = new THREE.MeshStandardMaterial({{ color: "{color}", roughness: 0.5, metalness: 0.3 }}); const mesh = new THREE.Mesh(geometry, material); mesh.position.set({pos_x}, {pos_y}, {pos_z}); mesh.rotation.set({rot_x}, {rot_y}, {rot_z}); mesh.scale.setScalar({scale}); mesh.castShadow = {shadows_str}; mesh.receiveShadow = {shadows_str}; modelContainer.add(mesh); }})();"#
+            )
+        } else if is_geometry_loader {
+            format!(
+                r#"(function() {{ const loader = new THREE.{loader_class}(); loader.load("{url}", function(geometry) {{ const material = new THREE.MeshStandardMaterial({{ color: "{color}", roughness: 0.5, metalness: 0.1, side: THREE.DoubleSide }}); const mesh = new THREE.Mesh(geometry, material); mesh.position.set({pos_x}, {pos_y}, {pos_z}); mesh.rotation.set({rot_x}, {rot_y}, {rot_z}); mesh.scale.setScalar({scale}); mesh.castShadow = {shadows_str}; mesh.receiveShadow = {shadows_str}; modelContainer.add(mesh); }}, undefined, function(err) {{ console.error('Failed to load model {idx}:', err); }}); }})();"#
+            )
+        } else {
+            let color_js = if color != default_color {
+                format!(
+                    r#"if (child.material) {{ if (Array.isArray(child.material)) {{ child.material.forEach(m => m.color.set("{color}")); }} else {{ child.material.color.set("{color}"); }} }}"#,
+                    color = color
+                )
+            } else {
+                String::new()
+            };
+            format!(
+                r#"(function() {{ const loader = new THREE.{loader_class}(); loader.load("{url}", function(object) {{ let model = object.scene || object.dae || object; model.position.set({pos_x}, {pos_y}, {pos_z}); model.rotation.set({rot_x}, {rot_y}, {rot_z}); model.scale.setScalar({scale}); model.traverse(function(child) {{ if (child.isMesh) {{ child.castShadow = {shadows_str}; child.receiveShadow = {shadows_str}; {color_js} }} }}); modelContainer.add(model); }}, undefined, function(err) {{ console.error('Failed to load model {idx}:', err); }}); }})();"#,
+                loader_class = loader_class,
+                url = url,
+                pos_x = pos_x,
+                pos_y = pos_y,
+                pos_z = pos_z,
+                rot_x = rot_x,
+                rot_y = rot_y,
+                rot_z = rot_z,
+                scale = scale,
+                shadows_str = shadows_str,
+                color_js = color_js,
+                idx = idx
+            )
+        }
+    }).collect();
+    
+    format!("loadingEl.style.display = 'none'; {}", load_calls.join(" "))
+}
+
+/// Build JavaScript code for loading a single model
+fn build_single_model_loading(
+    format: &ModelFormat,
+    model_url: &Option<String>,
+    auto_center: bool,
+    auto_scale: bool,
+    shadows: bool
+) -> String {
+    let url = model_url.clone().unwrap_or_default();
+    let has_model = !url.is_empty() && *format != ModelFormat::Cube;
+    let loader_class = format.loader_js();
+    let is_geometry_loader = matches!(format, ModelFormat::Stl | ModelFormat::Ply);
+    let auto_center_str = auto_center.to_string().to_lowercase();
+    let auto_scale_str = auto_scale.to_string().to_lowercase();
+    let shadows_str = shadows.to_string().to_lowercase();
+    
+    if !has_model {
+        return "const geometry = new THREE.BoxGeometry(1, 1, 1); let material = new THREE.MeshStandardMaterial({ color: state.color, roughness: 0.5, metalness: 0.3, wireframe: state.wireframe }); model = new THREE.Mesh(geometry, material); model.castShadow = true; model.receiveShadow = true; modelContainer.add(model); loadingEl.style.display = 'none';".to_string();
+    }
+    
+    if is_geometry_loader {
+        format!(
+            r#"const loader = new THREE.{loader_class}(); loader.load("{url}", function(geometry) {{ loadingEl.style.display = 'none'; const material = new THREE.MeshStandardMaterial({{ color: state.color, roughness: 0.5, metalness: 0.1, wireframe: state.wireframe, side: THREE.DoubleSide }}); model = new THREE.Mesh(geometry, material); model.castShadow = {shadows_str}; model.receiveShadow = {shadows_str}; if ({auto_center_str}) {{ const box = new THREE.Box3().setFromObject(model); const center = box.getCenter(new THREE.Vector3()); model.position.sub(center); }} if ({auto_scale_str}) {{ const box = new THREE.Box3().setFromObject(model); const size = box.getSize(new THREE.Vector3()); const maxDim = Math.max(size.x, size.y, size.z); if (maxDim > 0) {{ const s = 2 / maxDim; model.scale.setScalar(s); }} }} modelContainer.add(model); updateTransform(); }}, function(xhr) {{ const percent = xhr.loaded / xhr.total * 100; loadingEl.textContent = 'Loading: ' + Math.round(percent) + '%'; }}, function(error) {{ console.error('Error loading model:', error); loadingEl.style.display = 'none'; errorEl.style.display = 'block'; errorEl.textContent = 'Failed to load model: ' + (error.message || 'Unknown error'); const geometry = new THREE.BoxGeometry(1, 1, 1); const material = new THREE.MeshStandardMaterial({{ color: 0xff6b6b }}); model = new THREE.Mesh(geometry, material); modelContainer.add(model); }});"#
+        )
+    } else {
+        format!(
+            r#"const loader = new THREE.{loader_class}(); loader.load("{url}", function(object) {{ loadingEl.style.display = 'none'; if (object.scene) {{ model = object.scene; }} else if (object.dae) {{ model = object.scene; }} else {{ model = object; }} model.traverse(function(child) {{ if (child.isMesh) {{ child.castShadow = {shadows_str}; child.receiveShadow = {shadows_str}; if (!child.material) {{ child.material = new THREE.MeshStandardMaterial({{ color: state.color, roughness: 0.5, metalness: 0.3 }}); }} const materials = Array.isArray(child.material) ? child.material : [child.material]; materials.forEach(m => {{ if (m.opacity !== undefined && m.opacity < 0.1) m.opacity = 1.0; if (m.transparent === true && m.opacity < 0.1) m.transparent = false; if (state.color !== '#ff6b6b' && m.color) {{ m.color.set(state.color); }} m.wireframe = state.wireframe; }}); }} }}); if ({auto_center_str}) {{ const box = new THREE.Box3().setFromObject(model); const center = box.getCenter(new THREE.Vector3()); model.position.sub(center); }} if ({auto_scale_str}) {{ const box = new THREE.Box3().setFromObject(model); const size = box.getSize(new THREE.Vector3()); const maxDim = Math.max(size.x, size.y, size.z); if (maxDim > 0) {{ const s = 2 / maxDim; model.scale.setScalar(s); }} }} modelContainer.add(model); updateTransform(); }}, function(xhr) {{ const percent = xhr.loaded / xhr.total * 100; loadingEl.textContent = 'Loading: ' + Math.round(percent) + '%'; }}, function(error) {{ console.error('Error loading model:', error); loadingEl.style.display = 'none'; errorEl.style.display = 'block'; errorEl.textContent = 'Failed to load model: ' + (error.message || 'Unknown error'); const geometry = new THREE.BoxGeometry(1, 1, 1); const material = new THREE.MeshStandardMaterial({{ color: 0xff6b6b }}); model = new THREE.Mesh(geometry, material); modelContainer.add(model); }});"#
+        )
+    }
+}
+
 /// Generate the HTML with embedded Three.js
 fn generate_three_js_html(props: &ThreeViewProps) -> String {
     let rot_x_rad = props.rot_x.to_radians();
     let rot_y_rad = props.rot_y.to_radians();
     let rot_z_rad = props.rot_z.to_radians();
     
+    // Legacy single-model variables (for backward compatibility with template)
     let loader_url = props.format.loader_url();
     let loader_class = props.format.loader_js();
     let format_str = props.format.as_str();
     let model_url = props.model_url.clone().unwrap_or_default();
     let has_model = !model_url.is_empty() && props.format != ModelFormat::Cube;
     
-    // Build loader script tags (main loader + any extra dependencies)
-    let loader_script = if has_model && !loader_url.is_empty() {
-        let extra_scripts = props.format.extra_scripts();
-        let mut scripts: Vec<String> = extra_scripts.iter()
-            .map(|url| format!(r#"<script src="{}"></script>"#, url))
-            .collect();
-        scripts.push(format!(r#"<script src="{}"></script>"#, loader_url));
-        scripts.join("\n    ")
+    // Check if using multiple models
+    let use_multiple_models = !props.models.is_empty();
+    
+    // Build loader script tags
+    let loader_script = if use_multiple_models {
+        build_loader_scripts_for_models(&props.models)
     } else {
-        String::new()
+        build_loader_scripts_single(&props.format, &props.model_url)
+    };
+    
+    // Build model loading JavaScript code
+    let model_loading_code = if use_multiple_models {
+        build_multi_model_loading(&props.models, props.shadows)
+    } else {
+        build_single_model_loading(&props.format, &props.model_url, props.auto_center, props.auto_scale, props.shadows)
     };
     
     // Build shader code if needed
@@ -392,128 +617,7 @@ fn generate_three_js_html(props: &ThreeViewProps) -> String {
         
         async function loadModel() {{
             try {{
-                if (!{has_model} || "{fmt}" === "cube") {{
-                    const geometry = new THREE.BoxGeometry(1, 1, 1);
-                    let material;
-                    {shader_material_code}
-                    if (!material) {{
-                        material = new THREE.MeshStandardMaterial({{ 
-                            color: state.color,
-                            roughness: 0.5,
-                            metalness: 0.3,
-                            wireframe: state.wireframe
-                        }});
-                    }}
-                    model = new THREE.Mesh(geometry, material);
-                    model.castShadow = true;
-                    model.receiveShadow = true;
-                    modelContainer.add(model);
-                    loadingEl.style.display = 'none';
-                }} else {{
-                    const loader = new THREE.{loader_class}();
-                    const isGeometryLoader = ["STLLoader", "PLYLoader"].includes("{loader_class}");
-                    
-                    loader.load(
-                        "{model_url}",
-                        function (object) {{
-                            loadingEl.style.display = 'none';
-                            
-                            // STLLoader and PLYLoader return BufferGeometry, not Object3D
-                            if (isGeometryLoader) {{
-                                const geometry = object;
-                                // PLY/STL usually don't have built-in materials, use visible material
-                                const material = new THREE.MeshStandardMaterial({{ 
-                                    color: state.color,
-                                    roughness: 0.5,
-                                    metalness: 0.1,
-                                    wireframe: state.wireframe,
-                                    side: THREE.DoubleSide
-                                }});
-                                model = new THREE.Mesh(geometry, material);
-                                model.castShadow = {shadows};
-                                model.receiveShadow = {shadows};
-                            }} else if (object.scene) {{
-                                // GLTF/GLB/DAE loaders return an object with a scene property
-                                model = object.scene;
-                            }} else if (object.dae) {{
-                                // ColladaLoader specific
-                                model = object.scene;
-                            }} else {{
-                                // OBJLoader and FBXLoader return Object3D/Group
-                                model = object;
-                            }}
-                            
-                            // Apply color/wireframe to all meshes
-                            if (!isGeometryLoader) {{
-                                model.traverse(function (child) {{
-                                    if (child.isMesh) {{
-                                        child.castShadow = {shadows};
-                                        child.receiveShadow = {shadows};
-                                        
-                                        // Ensure mesh has a material
-                                        if (!child.material) {{
-                                            child.material = new THREE.MeshStandardMaterial({{
-                                                color: state.color,
-                                                roughness: 0.5,
-                                                metalness: 0.3
-                                            }});
-                                        }}
-                                        
-                                        // Handle material arrays (some models have multiple materials)
-                                        const materials = Array.isArray(child.material) ? child.material : [child.material];
-                                        
-                                        materials.forEach(m => {{
-                                            // Ensure material is visible and responds to light
-                                            if (m.opacity !== undefined && m.opacity < 0.1) m.opacity = 1.0;
-                                            if (m.transparent === true && m.opacity < 0.1) m.transparent = false;
-                                            
-                                            // Apply color override if not default
-                                            if (state.color !== "#ff6b6b" && m.color) {{
-                                                m.color.set(state.color);
-                                            }}
-                                            
-                                            // Apply wireframe setting
-                                            m.wireframe = state.wireframe;
-                                        }});
-                                    }}
-                                }});
-                            }}
-                            
-                            if ({auto_center}) {{
-                                const box = new THREE.Box3().setFromObject(model);
-                                const center = box.getCenter(new THREE.Vector3());
-                                model.position.sub(center);
-                            }}
-                            
-                            if ({auto_scale}) {{
-                                const box = new THREE.Box3().setFromObject(model);
-                                const size = box.getSize(new THREE.Vector3());
-                                const maxDim = Math.max(size.x, size.y, size.z);
-                                if (maxDim > 0) {{
-                                    const s = 2 / maxDim;
-                                    model.scale.setScalar(s);
-                                }}
-                            }}
-                            
-                            modelContainer.add(model);
-                            updateTransform();
-                        }},
-                        function (xhr) {{
-                            const percent = xhr.loaded / xhr.total * 100;
-                            loadingEl.textContent = 'Loading: ' + Math.round(percent) + '%';
-                        }},
-                        function (error) {{
-                            console.error('Error loading model:', error);
-                            loadingEl.style.display = 'none';
-                            errorEl.style.display = 'block';
-                            errorEl.textContent = 'Failed to load model: ' + (error.message || 'Unknown error');
-                            const geometry = new THREE.BoxGeometry(1, 1, 1);
-                            const material = new THREE.MeshStandardMaterial({{ color: 0xff6b6b }});
-                            model = new THREE.Mesh(geometry, material);
-                            modelContainer.add(model);
-                        }}
-                    );
-                }}
+                {model_loading_code}
             }} catch (e) {{
                 console.error('Error:', e);
                 loadingEl.style.display = 'none';
@@ -591,16 +695,11 @@ fn generate_three_js_html(props: &ThreeViewProps) -> String {
         auto_rotate = props.auto_rotate.to_string().to_lowercase(),
         rot_speed = props.rot_speed,
         wireframe = props.wireframe.to_string().to_lowercase(),
-        has_model = has_model.to_string().to_lowercase(),
-        loader_class = loader_class,
-        model_url = model_url,
-        auto_center = props.auto_center.to_string().to_lowercase(),
-        auto_scale = props.auto_scale.to_string().to_lowercase(),
         pos_x = props.pos_x,
         pos_y = props.pos_y,
         pos_z = props.pos_z,
-        shader_material_code = shader_material_code,
         shader_uniforms = shader_uniforms,
+        model_loading_code = model_loading_code,
     );
     
     html
