@@ -1,76 +1,47 @@
-#!/bin/bash
-# Publish script for dioxus-three
+#!/usr/bin/env bash
+set -euo pipefail
 
-set -e
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR/.."
 
 echo "========================================="
 echo "Publishing dioxus-three to crates.io"
 echo "========================================="
 echo ""
 
-cd "$(dirname "$0")/.."
+echo "🔍 Formatting code..."
+cargo fmt
 
-# Check if logged in
-echo "1. Checking cargo login status..."
-cargo whoami 2>/dev/null || {
-    echo "❌ Not logged in to crates.io"
-    echo "   Run: cargo login"
-    echo "   Get token from: https://crates.io/settings/tokens"
-    exit 1
-}
-echo "✅ Logged in"
-echo ""
+echo "🔍 Running clippy..."
+cargo clippy
 
-# Verify build
-echo "2. Verifying build..."
-cargo build --release
-echo "✅ Build successful"
-echo ""
-
-# Run tests
-echo "3. Running tests..."
+echo "🧪 Running tests..."
 cargo test
-echo "✅ Tests passed"
-echo ""
 
-# Generate docs
-echo "4. Generating documentation..."
-cargo doc --no-deps
-echo "✅ Documentation generated"
-echo ""
+echo "📦 Verifying package..."
+cargo publish --dry-run
 
-# Check package
-echo "5. Checking package contents..."
-cargo package --list | head -20
 echo ""
-
-# Dry run publish
-echo "6. Dry run publish..."
-cargo publish --dry-run --allow-dirty
-echo "✅ Dry run successful"
-echo ""
-
-# Confirm
-echo "========================================="
-echo "Ready to publish!"
-echo "========================================="
+echo "========================================"
+echo "🚀 Ready to publish!"
+echo "========================================"
 echo ""
 echo "Author: Esteban Puello <eftech93@gmail.com>"
 echo "Repository: https://github.com/eftech93/dioxus-three"
-echo "Version: $(grep '^version' Cargo.toml | head -1)"
+echo "Crate: dioxus-three"
 echo ""
-read -p "Are you sure you want to publish? (yes/no): " confirm
-
-if [ "$confirm" = "yes" ]; then
-    echo ""
-    echo "Publishing..."
-    cargo publish --allow-dirty
-    echo ""
-    echo "✅ Published successfully!"
-    echo ""
-    echo "View at: https://crates.io/crates/dioxus-three"
-    echo "Docs at: https://docs.rs/dioxus-three"
-else
-    echo "Cancelled."
-    exit 0
+read -p "Continue with publish? (y/N) " -n 1 -r
+echo
+if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    echo "❌ Publish cancelled"
+    exit 1
 fi
+
+echo "📦 Publishing dioxus-three..."
+cargo publish
+
+echo ""
+echo "✅ dioxus-three published successfully!"
+echo ""
+echo "View at: https://crates.io/crates/dioxus-three"
+echo "Docs at: https://docs.rs/dioxus-three"
