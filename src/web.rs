@@ -1,16 +1,16 @@
 //! Web/WASM implementation of ThreeView using canvas element
 
-use dioxus::prelude::*;
 use crate::ThreeViewProps;
+use dioxus::prelude::*;
 
 /// A Three.js 3D viewer component for Dioxus Web
-/// 
+///
 /// Uses a native canvas element with Three.js injected via script tags.
 #[component]
 pub fn ThreeView(props: ThreeViewProps) -> Element {
     let canvas_id = use_signal(|| format!("three-canvas-{}", js_sys::Math::random()));
     let class = props.class.clone();
-    
+
     // Store props in individual signals so we can track changes
     let mut cam_x = use_signal(|| props.cam_x);
     let mut cam_y = use_signal(|| props.cam_y);
@@ -30,7 +30,7 @@ pub fn ThreeView(props: ThreeViewProps) -> Element {
     let mut show_axes = use_signal(|| props.show_axes);
     let mut wireframe = use_signal(|| props.wireframe);
     let mut models = use_signal(|| props.models.clone());
-    
+
     // Update signals when props change
     use_effect(use_reactive((&props,), move |(new_props,)| {
         cam_x.set(new_props.cam_x);
@@ -52,24 +52,24 @@ pub fn ThreeView(props: ThreeViewProps) -> Element {
         wireframe.set(new_props.wireframe);
         models.set(new_props.models.clone());
     }));
-    
+
     // Effect that runs when models change - reload the scene models
     use_effect(move || {
         let id = canvas_id();
         let mds = models();
-        
+
         web_sys::console::log_1(&format!("ThreeView models changed: {} models", mds.len()).into());
-        
+
         wasm_bindgen_futures::spawn_local(async move {
             // Load required loaders first
             load_required_loaders(&mds).await;
-            
+
             // Wait a bit for loaders to be available
             wait_ms(500).await;
-            
+
             // Generate model loading code
             let model_js = build_models_js(&mds);
-            
+
             // Reload models in the scene
             let js_code = format!(
                 r#"
@@ -98,13 +98,13 @@ pub fn ThreeView(props: ThreeViewProps) -> Element {
                 model_js,
                 mds.len()
             );
-            
+
             if let Err(e) = js_sys::eval(&js_code) {
                 web_sys::console::error_1(&format!("Failed to update models: {:?}", e).into());
             }
         });
     });
-    
+
     // Effect that runs when any of the transform/camera values change
     use_effect(move || {
         let id = canvas_id();
@@ -125,17 +125,20 @@ pub fn ThreeView(props: ThreeViewProps) -> Element {
         let sg = show_grid();
         let sa = show_axes();
         let wf = wireframe();
-        
+
         // Build update JS
         let rot_x_rad = rx.to_radians();
         let rot_y_rad = ry.to_radians();
         let rot_z_rad = rz.to_radians();
-        
-        web_sys::console::log_1(&format!(
-            "ThreeView update: cam=({:.1},{:.1},{:.1}), auto_rotate={}, scale={:.1}",
-            cx, cy, cz, ar, sc
-        ).into());
-        
+
+        web_sys::console::log_1(
+            &format!(
+                "ThreeView update: cam=({:.1},{:.1},{:.1}), auto_rotate={}, scale={:.1}",
+                cx, cy, cz, ar, sc
+            )
+            .into(),
+        );
+
         let js_code = format!(
             r#"
             (function() {{
@@ -169,8 +172,12 @@ pub fn ThreeView(props: ThreeViewProps) -> Element {
             }})();
             "#,
             id,
-            cx, cy, cz,
-            tx, ty, tz,
+            cx,
+            cy,
+            cz,
+            tx,
+            ty,
+            tz,
             ar.to_string().to_lowercase(),
             rs,
             rot_x_rad,
@@ -183,7 +190,7 @@ pub fn ThreeView(props: ThreeViewProps) -> Element {
             sa.to_string().to_lowercase(),
             wf.to_string().to_lowercase()
         );
-        
+
         if let Err(e) = js_sys::eval(&js_code) {
             web_sys::console::error_1(&format!("Failed to update scene: {:?}", e).into());
         }
@@ -208,7 +215,8 @@ pub fn ThreeView(props: ThreeViewProps) -> Element {
 async fn wait_ms(ms: u32) {
     let promise = js_sys::Promise::new(&mut |resolve, _| {
         if let Some(window) = web_sys::window() {
-            let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(&resolve, ms as i32);
+            let _ =
+                window.set_timeout_with_callback_and_timeout_and_arguments_0(&resolve, ms as i32);
         }
     });
     let _ = wasm_bindgen_futures::JsFuture::from(promise).await;
@@ -223,7 +231,7 @@ async fn init_three_js(canvas_id: &str) {
             return;
         }
     };
-    
+
     let document = match window.document() {
         Some(d) => d,
         None => {
@@ -231,7 +239,7 @@ async fn init_three_js(canvas_id: &str) {
             return;
         }
     };
-    
+
     let canvas = match document.get_element_by_id(canvas_id) {
         Some(el) => el,
         None => {
@@ -239,25 +247,29 @@ async fn init_three_js(canvas_id: &str) {
             return;
         }
     };
-    
+
     // Inject Three.js if not already loaded
     if !is_three_js_loaded(&document) {
         web_sys::console::log_1(&"Loading Three.js...".into());
-        load_script(&document, "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js").await;
+        load_script(
+            &document,
+            "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js",
+        )
+        .await;
     }
-    
+
     // Wait for Three.js to be available
     let mut attempts = 0;
     while !is_three_js_loaded(&document) && attempts < 50 {
         wait_ms(200).await;
         attempts += 1;
     }
-    
+
     if !is_three_js_loaded(&document) {
         web_sys::console::error_1(&"Failed to load Three.js after waiting".into());
         return;
     }
-    
+
     web_sys::console::log_1(&"Three.js loaded successfully!".into());
     create_scene(&canvas);
 }
@@ -291,32 +303,32 @@ async fn load_script(document: &web_sys::Document, url: &str) {
     if is_script_loaded(document, url) {
         return;
     }
-    
+
     web_sys::console::log_1(&format!("Loading script: {}", url).into());
-    
+
     let script = match document.create_element("script") {
         Ok(s) => s,
         Err(_) => return,
     };
-    
+
     let _ = script.set_attribute("src", url);
     let _ = script.set_attribute("async", "false");
-    
+
     let head = match document.head() {
         Some(h) => h,
         None => return,
     };
-    
+
     let _ = head.append_child(&script);
-    
+
     let mut attempts = 0;
     while !is_script_loaded(document, url) && attempts < 50 {
         wait_ms(100).await;
         attempts += 1;
     }
-    
+
     wait_ms(500).await;
-    
+
     web_sys::console::log_1(&format!("Script loaded: {}", url).into());
 }
 
@@ -481,7 +493,7 @@ fn create_scene(canvas: &web_sys::Element) {
         "#,
         canvas.id(),
     );
-    
+
     if let Err(e) = js_sys::eval(&js_code) {
         web_sys::console::error_1(&format!("Failed to create scene: {:?}", e).into());
     }
@@ -502,11 +514,12 @@ fn build_models_js(models: &[crate::ModelConfig]) -> String {
             model.castShadow = true;
             model.receiveShadow = true;
             modelContainer.add(model);
-        "#.to_string();
+        "#
+        .to_string();
     }
-    
+
     let mut model_code = String::new();
-    
+
     for (idx, model) in models.iter().enumerate() {
         let pos_x = model.pos_x;
         let pos_y = model.pos_y;
@@ -517,7 +530,7 @@ fn build_models_js(models: &[crate::ModelConfig]) -> String {
         let scl = model.scale;
         let color = &model.color;
         let url = &model.url;
-        
+
         let code = if model.format == crate::ModelFormat::Cube || model.url.is_empty() {
             format!(
                 r#"
@@ -543,8 +556,11 @@ fn build_models_js(models: &[crate::ModelConfig]) -> String {
         } else {
             // Load external model using appropriate loader
             let loader_class = model.format.loader_js();
-            let is_geometry_loader = matches!(model.format, crate::ModelFormat::Stl | crate::ModelFormat::Ply);
-            
+            let is_geometry_loader = matches!(
+                model.format,
+                crate::ModelFormat::Stl | crate::ModelFormat::Ply
+            );
+
             if is_geometry_loader {
                 // Geometry loaders (STL, PLY) - load geometry and create mesh
                 format!(
@@ -597,7 +613,8 @@ fn build_models_js(models: &[crate::ModelConfig]) -> String {
                         );
                     }})();
                     "#,
-                    idx, model.format.as_str(),
+                    idx,
+                    model.format.as_str(),
                     loader = loader_class,
                     url = url.replace("'", "\\'"),
                     color = color,
@@ -663,7 +680,8 @@ fn build_models_js(models: &[crate::ModelConfig]) -> String {
                         );
                     }})();
                     "#,
-                    idx, model.format.as_str(),
+                    idx,
+                    model.format.as_str(),
                     loader = loader_class,
                     url = url.replace("'", "\\'"),
                     color = color,
@@ -678,10 +696,10 @@ fn build_models_js(models: &[crate::ModelConfig]) -> String {
                 )
             }
         };
-        
+
         model_code.push_str(&code);
     }
-    
+
     model_code
 }
 
@@ -691,28 +709,29 @@ async fn load_required_loaders(models: &[crate::ModelConfig]) {
         Some(w) => w,
         None => return,
     };
-    
+
     let document = match window.document() {
         Some(d) => d,
         None => return,
     };
-    
+
     // Collect unique formats that need loaders
     let mut unique_formats: Vec<crate::ModelFormat> = vec![];
     for model in models {
-        if model.format != crate::ModelFormat::Cube 
-            && !model.url.is_empty() 
-            && !unique_formats.contains(&model.format) {
+        if model.format != crate::ModelFormat::Cube
+            && !model.url.is_empty()
+            && !unique_formats.contains(&model.format)
+        {
             unique_formats.push(model.format.clone());
         }
     }
-    
+
     // Load each required loader
     for format in &unique_formats {
         let loader_url = get_loader_url(format);
         if !loader_url.is_empty() {
             load_script(&document, loader_url).await;
-            
+
             // Load extra dependencies (like fflate for FBX)
             for extra in format.extra_scripts() {
                 load_script(&document, extra).await;
@@ -724,12 +743,24 @@ async fn load_required_loaders(models: &[crate::ModelConfig]) {
 /// Get the loader URL for a format
 fn get_loader_url(format: &crate::ModelFormat) -> &'static str {
     match format {
-        crate::ModelFormat::Obj => "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js",
-        crate::ModelFormat::Fbx => "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js",
-        crate::ModelFormat::Gltf | crate::ModelFormat::Glb => "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js",
-        crate::ModelFormat::Stl => "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js",
-        crate::ModelFormat::Ply => "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/PLYLoader.js",
-        crate::ModelFormat::Dae => "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/ColladaLoader.js",
+        crate::ModelFormat::Obj => {
+            "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"
+        }
+        crate::ModelFormat::Fbx => {
+            "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js"
+        }
+        crate::ModelFormat::Gltf | crate::ModelFormat::Glb => {
+            "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"
+        }
+        crate::ModelFormat::Stl => {
+            "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"
+        }
+        crate::ModelFormat::Ply => {
+            "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/PLYLoader.js"
+        }
+        crate::ModelFormat::Dae => {
+            "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/ColladaLoader.js"
+        }
         crate::ModelFormat::Json => "",
         crate::ModelFormat::Cube => "",
     }

@@ -354,8 +354,6 @@ impl ShaderPreset {
     }
 }
 
-
-
 /// Build loader scripts for multiple models
 pub fn build_loader_scripts_for_models(models: &[ModelConfig]) -> String {
     let mut scripts: Vec<String> = vec![];

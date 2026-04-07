@@ -1,10 +1,10 @@
 //! Desktop implementation of ThreeView using WebView iframe
 
-use dioxus::prelude::*;
 use crate::{generate_three_js_html, ThreeViewProps};
+use dioxus::prelude::*;
 
 /// A Three.js 3D viewer component for Dioxus Desktop
-/// 
+///
 /// Uses a WebView iframe to render the Three.js scene.
 /// Supports all features including multiple models, shaders, and animations.
 #[component]
