@@ -7,20 +7,18 @@ Understanding how Dioxus Three works internally.
 ```mermaid
 graph TB
     A[Dioxus App] --> B[ThreeView Component]
-    B --> C[generate_three_js_html]
-    C --> D[HTML String]
-    D --> E[WebView iframe]
-    E --> F[Three.js Scene]
+    B --> C{Platform}
+    C -->|Desktop/Mobile| D[WebView iframe]
+    C -->|Web| E[HTML5 Canvas]
+    D --> F[Three.js Scene]
+    E --> F
 ```
 
-## How It Works
+## Platform Implementations
 
-1. **Props** are passed to `ThreeView`
-2. **HTML Generation** creates a complete HTML document
-3. **WebView** renders the HTML in an iframe
-4. **Three.js** loads and renders the 3D scene
+### Desktop & Mobile
 
-## Component Structure
+Uses WebView with an iframe to render Three.js:
 
 ```rust
 #[component]
@@ -36,6 +34,74 @@ pub fn ThreeView(props: ThreeViewProps) -> Element {
 }
 ```
 
+**Characteristics:**
+- Generates complete HTML document
+- Full re-render on prop changes
+- Simple but not optimal for frequent updates
+
+### Web (WASM)
+
+Uses HTML5 Canvas with direct Three.js integration:
+
+```rust
+#[component]
+pub fn ThreeView(props: ThreeViewProps) -> Element {
+    // Store props in signals
+    let mut cam_x = use_signal(|| props.cam_x);
+    // ...
+    
+    // Update signals when props change
+    use_effect(use_reactive((&props,), move |(new_props,)| {
+        cam_x.set(new_props.cam_x);
+        // ...
+    }));
+    
+    // Effect runs when signals change
+    use_effect(move || {
+        let cx = cam_x(); // Subscribe to changes
+        // Update JavaScript state
+        update_scene(cx, ...);
+    });
+    
+    rsx! {
+        canvas {
+            // ...
+        }
+    }
+}
+```
+
+**Characteristics:**
+- Real-time state synchronization
+- Efficient updates without full re-renders
+- JavaScript state object on canvas element
+
+## Data Flow
+
+### Desktop/Mobile
+
+```mermaid
+flowchart LR
+    A[User Action] --> B[Signal Update]
+    B --> C[Component Re-render]
+    C --> D[New HTML Generated]
+    D --> E[WebView Updates]
+    E --> F[Scene Rebuilds]
+```
+
+### Web
+
+```mermaid
+flowchart LR
+    A[User Action] --> B[Signal Update]
+    B --> C[Props Change]
+    C --> D[Signal Update via use_reactive]
+    D --> E[use_effect Triggers]
+    E --> F[JavaScript State Updated]
+    F --> G[Animation Loop Reads State]
+    G --> H[Scene Updates]
+```
+
 ## HTML Generation
 
 The HTML includes:
@@ -46,7 +112,7 @@ The HTML includes:
 4. **Model Loading** - Async model loading
 5. **Animation Loop** - Render loop with auto-rotation
 
-### Generated HTML Structure
+### Generated HTML Structure (Desktop/Mobile)
 
 ```html
 <!DOCTYPE html>
@@ -81,20 +147,67 @@ The HTML includes:
 </html>
 ```
 
-## Data Flow
+## Web Implementation Details
 
-```mermaid
-flowchart LR
-    A[User Action] --> B[Signal Update]
-    B --> C[Component Re-render]
-    C --> D[New HTML Generated]
-    D --> E[WebView Updates]
-    E --> F[Scene Rebuilds]
+### State Management
+
+JavaScript state is stored on the canvas element:
+
+```javascript
+const state = {
+    camX: 8, camY: 8, camZ: 8,
+    rotX: 0, rotY: 0, rotZ: 0,
+    autoRotate: true,
+    scale: 1.0,
+    // ...
+};
+
+canvas.dioxusThreeState = state;
 ```
 
-**Note:** Each prop change regenerates the entire HTML. This is simple but not optimal for frequent updates.
+### Animation Loop
+
+The animation loop reads from state every frame:
+
+```javascript
+function animate() {
+    requestAnimationFrame(animate);
+    
+    // Update camera from state
+    camera.position.set(state.camX, state.camY, state.camZ);
+    
+    // Update transforms from state
+    modelContainer.scale.setScalar(state.scale);
+    
+    if (state.autoRotate) {
+        autoRotY += state.rotSpeed * 0.01;
+        modelContainer.rotation.y = state.rotY + autoRotY;
+    }
+    
+    renderer.render(scene, camera);
+}
+```
+
+### Loader Loading
+
+Format-specific loaders are loaded dynamically:
+
+```rust
+async fn load_required_loaders(models: &[ModelConfig]) {
+    // Collect unique formats
+    let unique_formats = // ...
+    
+    // Load each required loader
+    for format in &unique_formats {
+        let loader_url = get_loader_url(format);
+        load_script(&document, loader_url).await;
+    }
+}
+```
 
 ## Model Loading Flow
+
+### Desktop/Mobile
 
 ```mermaid
 sequenceDiagram
@@ -113,6 +226,28 @@ sequenceDiagram
     T->>W: Callback with object
     W->>W: Add to scene
     W->>U: Display model
+```
+
+### Web
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant C as ThreeView
+    participant L as Loader Loader
+    participant J as JavaScript
+    participant T as Three.js
+    
+    U->>C: Add model
+    C->>C: models signal changes
+    C->>L: load_required_loaders()
+    L->>T: Load GLTFLoader.js
+    C->>J: Update models via JS
+    J->>T: Create GLTFLoader
+    T->>T: Load model from URL
+    T->>T: Parse glTF data
+    T->>J: Add to modelContainer
+    J->>U: Display model
 ```
 
 ## Shader System
@@ -162,28 +297,33 @@ Different formats require different loaders:
 
 ## Performance Considerations
 
-### Current Approach
+### Desktop/Mobile
 
 - **Pros:** Simple, no Rust↔JS bridge needed
 - **Cons:** Full re-render on prop changes
 
+### Web
+
+- **Pros:** Efficient updates, real-time state sync
+- **Cons:** More complex implementation
+
 ### Optimization Opportunities
 
-1. **Message passing** - Send updates instead of regenerating HTML
+1. **Message passing** - Send updates instead of regenerating HTML (desktop)
 2. **Virtual scrolling** - For multiple views
 3. **Caching** - Cache loaded models in memory
 4. **CDN bundling** - Bundle Three.js for offline use
 
 ## Security
 
-- JavaScript runs in isolated WebView
+- JavaScript runs in isolated WebView (desktop/mobile)
 - No eval() or dynamic code execution
 - Models loaded from external URLs (CORS dependent)
 - User shader code is escaped to prevent XSS
 
 ## Future Enhancements
 
-- Rust↔JavaScript bridge for real-time updates
+- Rust↔JavaScript bridge for real-time updates (desktop)
 - Texture loading from URLs
 - Animation playback from glTF/FBX
 - Post-processing effects (bloom, DOF)

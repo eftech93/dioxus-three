@@ -6,6 +6,6 @@ authors = ["Esteban Puello <eftech93@gmail.com>"]
 
 [dependencies]
 dioxus-three = { path = "../.." }
-dioxus = { version = "0.5", features = ["desktop"] }
-dioxus-desktop = "0.5"
+dioxus = { version = "0.6", features = ["desktop"] }
+dioxus-desktop = "0.6"
 tracing-subscriber = "0.3"

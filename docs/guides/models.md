@@ -35,38 +35,118 @@ rsx! {
 }
 ```
 
-## Dynamic Model Loading
+## Multiple Models
 
-Switch models based on user selection:
+Display multiple models simultaneously with independent transforms:
 
 ```rust
+use dioxus::prelude::*;
+use dioxus_three::{ThreeView, ModelConfig, ModelFormat};
+
 fn app() -> Element {
-    let mut current_model = use_signal(|| 0usize);
-    
     let models = vec![
-        ("Cube", None, ModelFormat::Cube),
-        ("Suzanne", Some("https://example.com/suzanne.obj"), ModelFormat::Obj),
-        ("Helmet", Some("https://example.com/helmet.gltf"), ModelFormat::Gltf),
+        // Red cube at origin
+        ModelConfig::new("", ModelFormat::Cube)
+            .with_position(0.0, 0.0, 0.0)
+            .with_color("#ff6b6b"),
+        
+        // Helmet to the right
+        ModelConfig::new(
+            "https://threejs.org/examples/models/gltf/DamagedHelmet/glTF/DamagedHelmet.gltf",
+            ModelFormat::Gltf
+        )
+            .with_position(2.0, 0.0, 0.0)
+            .with_scale(0.5),
+        
+        // Duck to the left
+        ModelConfig::new(
+            "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Duck/glTF/Duck.gltf",
+            ModelFormat::Gltf
+        )
+            .with_position(-2.0, 0.0, 0.0)
+            .with_scale(0.3)
+            .with_rotation(0.0, 90.0, 0.0),
     ];
     
-    let (name, url, format) = &models[current_model()];
+    rsx! {
+        ThreeView {
+            models: models,
+            auto_rotate: true,
+        }
+    }
+}
+```
+
+### ModelConfig Options
+
+| Method | Description |
+|--------|-------------|
+| `new(url, format)` | Create a new model config |
+| `with_position(x, y, z)` | Set position in 3D space |
+| `with_rotation(x, y, z)` | Set rotation in degrees |
+| `with_scale(scale)` | Set uniform scale |
+| `with_color(color)` | Set material color (hex) |
+
+## Dynamic Model Loading
+
+Add or remove models at runtime:
+
+```rust
+use dioxus::prelude::*;
+use dioxus_three::{ThreeView, ModelConfig, ModelFormat};
+
+fn app() -> Element {
+    let mut models = use_signal(|| vec![
+        ModelConfig::new("", ModelFormat::Cube).with_color("#ff6b6b")
+    ]);
     
     rsx! {
         div { style: "display: flex; height: 100vh;",
+            // Control panel
             div { style: "width: 250px; padding: 20px; background: #333; color: white;",
-                h3 { "Select Model" }
-                for (i, (n, _, _)) in models.iter().enumerate() {
-                    button {
-                        style: if i == current_model() { "background: #DEC647;" } else { "" },
-                        onclick: move |_| current_model.set(i),
-                        "{n}"
-                    }
+                h3 { "Add Models" }
+                
+                button {
+                    onclick: move |_| {
+                        models.write().push(
+                            ModelConfig::new("", ModelFormat::Cube)
+                                .with_position(
+                                    rand::random::<f32>() * 4.0 - 2.0,
+                                    0.0,
+                                    rand::random::<f32>() * 4.0 - 2.0
+                                )
+                                .with_color("#00ff00")
+                        );
+                    },
+                    "Add Random Cube"
+                }
+                
+                button {
+                    onclick: move |_| {
+                        models.write().push(
+                            ModelConfig::new(
+                                "https://threejs.org/examples/models/gltf/DamagedHelmet/glTF/DamagedHelmet.gltf",
+                                ModelFormat::Gltf
+                            )
+                        );
+                    },
+                    "Add Helmet"
+                }
+                
+                button {
+                    onclick: move |_| {
+                        let mut m = models.write();
+                        if m.len() > 1 {
+                            m.pop();
+                        }
+                    },
+                    "Remove Last"
                 }
             }
             
+            // 3D View
             ThreeView {
-                model_url: url.clone(),
-                format: format.clone(),
+                models: models.read().clone(),
                 auto_center: true,
                 auto_scale: true,
             }
@@ -81,7 +161,7 @@ The component handles loading automatically, showing a spinner until the model i
 
 ## Error Handling
 
-If a model fails to load, the component automatically falls back to a red cube and logs the error to the console.
+If a model fails to load, the component automatically falls back to a colored cube and logs the error to the console.
 
 ## Best Practices
 
@@ -90,6 +170,7 @@ If a model fails to load, the component automatically falls back to a red cube a
 3. **Optimize models** - Large models take longer to load
 4. **Use GLB for best results** - Single file, efficient format
 5. **Set appropriate scale** - Use `auto_scale` for unknown models
+6. **Position models** - When using multiple models, position them so they don't overlap
 
 ## Model Preloading
 
@@ -114,6 +195,55 @@ fn app() -> Element {
             ThreeView {
                 model_url: Some("https://example.com/model.glb".to_string()),
                 format: ModelFormat::Glb,
+            }
+        }
+    }
+}
+```
+
+## Switching Between Models
+
+Replace models dynamically:
+
+```rust
+fn app() -> Element {
+    let mut current_model = use_signal(|| 0usize);
+    
+    let model_list = vec![
+        ("Cube", ModelConfig::new("", ModelFormat::Cube)),
+        ("Helmet", ModelConfig::new(
+            "https://threejs.org/examples/models/gltf/DamagedHelmet/glTF/DamagedHelmet.gltf",
+            ModelFormat::Gltf
+        )),
+        ("Duck", ModelConfig::new(
+            "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Duck/glTF/Duck.gltf",
+            ModelFormat::Gltf
+        )),
+    ];
+    
+    let (_, config) = &model_list[current_model()];
+    
+    rsx! {
+        div { style: "height: 100vh;",
+            // Model selector
+            div { style: "position: absolute; top: 20px; left: 20px; z-index: 10;",
+                for (i, (name, _)) in model_list.iter().enumerate() {
+                    button {
+                        style: if i == current_model() { 
+                            "background: #DEC647; margin-right: 10px;" 
+                        } else { 
+                            "margin-right: 10px;" 
+                        },
+                        onclick: move |_| current_model.set(i),
+                        "{name}"
+                    }
+                }
+            }
+            
+            ThreeView {
+                models: vec![config.clone()],
+                auto_center: true,
+                auto_scale: true,
             }
         }
     }

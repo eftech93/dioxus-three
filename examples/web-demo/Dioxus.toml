@@ -1,0 +1,21 @@
+[application]
+name = "dioxus-three-web-demo"
+default_platform = "web"
+out_dir = "dist"
+asset_dir = "public"
+
+[web.app]
+title = "Dioxus Three - Web Demo"
+base_path = "/"
+
+[web.watcher]
+watch_path = ["src", "../.."]
+reload_html = true
+
+[web.resource]
+style = []
+script = []
+
+[web.resource.dev]
+style = []
+script = []

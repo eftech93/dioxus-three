@@ -1,0 +1,17 @@
+[application]
+name = "dioxus-three-mobile-demo"
+default_platform = "mobile"
+out_dir = "dist"
+asset_dir = "assets"
+
+[mobile.app]
+name = "Dioxus Three"
+identifier = "com.example.dioxus-three"
+version = "0.1.0"
+
+[mobile.android]
+min_sdk = 21
+target_sdk = 34
+
+[mobile.ios]
+deployment_target = "13.0"

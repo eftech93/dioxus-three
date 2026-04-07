@@ -1,20 +1,33 @@
-# Dioxus Three Documentation
+# Dioxus Three Documentation v0.0.2
 
-A **Three.js 3D model viewer component** for Dioxus Desktop applications with support for custom GLSL shaders.
+A **Three.js 3D model viewer component** for Dioxus applications with support for custom GLSL shaders.
+
+## Platform Support
+
+| Platform | Backend | Status |
+|----------|---------|--------|
+| Desktop (Windows/macOS/Linux) | WebView iframe | ✅ Supported |
+| Web (WASM) | HTML5 Canvas | ✅ Supported |
+| Mobile (iOS/Android) | WebView | ✅ Supported |
 
 ```mermaid
 graph LR
     A[Dioxus App] --> B[ThreeView Component]
-    B --> C[WebView]
-    C --> D[Three.js Scene]
-    D --> E[3D Models]
-    D --> F[Custom Shaders]
+    B --> C{Platform}
+    C -->|Desktop/Mobile| D[WebView iframe]
+    C -->|Web| E[HTML5 Canvas]
+    D --> F[Three.js Scene]
+    E --> F
+    F --> G[3D Models]
+    F --> H[Custom Shaders]
 ```
 
 ## Features
 
+- 🖥️ **Multi-Platform** - Desktop, Web (WASM), and Mobile support
 - 🎮 **Interactive 3D** - Render and control 3D models with ease
 - 📁 **Multiple Formats** - Supports OBJ, FBX, GLTF, GLB, STL, PLY, DAE
+- 📦 **Multi-Model** - Load and display multiple models simultaneously
 - 🎨 **Custom Shaders** - Built-in shader presets + custom GLSL support
 - 🌊 **Shader Effects** - Gradient, Water, Hologram, Toon, Heatmap
 - 📷 **Camera Control** - Adjustable camera position and target
@@ -39,15 +52,20 @@ graph LR
 
 ```rust
 use dioxus::prelude::*;
-use dioxus_three::{ThreeView, ModelFormat};
+use dioxus_three::{ThreeView, ModelConfig, ModelFormat};
 
 fn app() -> Element {
+    let models = vec![
+        ModelConfig::new("", ModelFormat::Cube)
+            .with_color("#ff6b6b"),
+        ModelConfig::new("https://example.com/helmet.gltf", ModelFormat::Gltf)
+            .with_position(2.0, 0.0, 0.0),
+    ];
+    
     rsx! {
         ThreeView {
-            model_url: Some("https://example.com/model.obj".to_string()),
-            format: ModelFormat::Obj,
-            auto_center: true,
-            auto_scale: true,
+            models: models,
+            auto_rotate: true,
             show_grid: true,
         }
     }
@@ -60,7 +78,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-dioxus-three = "0.1"
+dioxus-three = "0.0.2"
 dioxus = { version = "0.5", features = ["desktop"] }
 ```
 
@@ -99,6 +117,31 @@ fn app() -> Element {
             auto_center: true,
             auto_scale: true,
             show_grid: true,
+        }
+    }
+}
+```
+
+### Multiple Models
+
+```rust
+use dioxus::prelude::*;
+use dioxus_three::{ThreeView, ModelConfig, ModelFormat};
+
+fn app() -> Element {
+    let models = vec![
+        ModelConfig::new("", ModelFormat::Cube)
+            .with_position(0.0, 0.0, 0.0)
+            .with_color("#ff6b6b"),
+        ModelConfig::new("https://example.com/helmet.gltf", ModelFormat::Gltf)
+            .with_position(2.0, 0.0, 0.0)
+            .with_scale(0.5),
+    ];
+    
+    rsx! {
+        ThreeView {
+            models: models,
+            auto_rotate: true,
         }
     }
 }
@@ -183,6 +226,7 @@ fn app() -> Element {
 |------|------|---------|-------------|
 | `model_url` | `Option<String>` | `None` | URL or path to 3D model file |
 | `format` | `ModelFormat` | `ModelFormat::Cube` | Model file format |
+| `models` | `Vec<ModelConfig>` | `[]` | Multiple models to display |
 | `auto_center` | `bool` | `true` | Auto-center model on load |
 | `auto_scale` | `bool` | `false` | Auto-scale to fit viewport |
 
@@ -248,9 +292,24 @@ The demo includes:
 - Model URL input
 - Preset models
 - **Shader effects selector**
+- **Multi-model support**
 - Transform controls
 - Appearance controls
 - Camera controls
+
+## Platform-Specific Notes
+
+### Desktop
+Uses WebView with an iframe to render Three.js. The entire HTML is regenerated on prop changes.
+
+### Web (WASM)
+Uses HTML5 Canvas with direct Three.js integration. Features:
+- Real-time state synchronization via JavaScript
+- Dynamic loader injection
+- Efficient updates without full re-renders
+
+### Mobile
+Uses WebView (same as desktop) with touch-friendly controls.
 
 ## What are Shaders?
 
@@ -304,8 +363,12 @@ Then use `http://localhost:8080/model.obj` as the URL.
 
 ## Requirements
 
-- Dioxus Desktop 0.5+
+- Dioxus 0.5+
 - Internet connection (for Three.js CDN and external models)
+
+## Changelog
+
+See [CHANGELOG.md](changelog.md) for version history.
 
 ## Author
 

@@ -1,13 +1,31 @@
 //! Dioxus Three - A Three.js component for Dioxus
 //!
 //! Provides a simple component for embedding interactive 3D scenes
-//! using Three.js within Dioxus Desktop applications.
+//! using Three.js within Dioxus applications.
+//!
+//! ## Platform Support
+//!
+//! - **Desktop** (Windows, macOS, Linux): Uses WebView with iframe
+//! - **Web** (WASM): Renders directly to canvas element
+//! - **Mobile** (iOS, Android): Uses WebView (similar to desktop)
 //!
 //! Supports multiple 3D formats: OBJ, FBX, GLTF, GLB, STL, PLY, and more.
 //! Also supports custom GLSL shaders for advanced visual effects.
 
 use dioxus::prelude::*;
 use std::collections::HashMap;
+
+// Platform-specific modules
+#[cfg(not(target_arch = "wasm32"))]
+mod desktop;
+#[cfg(target_arch = "wasm32")]
+mod web;
+
+// Re-export platform-specific ThreeView
+#[cfg(not(target_arch = "wasm32"))]
+pub use desktop::ThreeView;
+#[cfg(target_arch = "wasm32")]
+pub use web::ThreeView;
 
 /// Custom shader configuration
 #[derive(Clone, PartialEq, Debug, Default)]
@@ -336,22 +354,10 @@ impl ShaderPreset {
     }
 }
 
-/// A Three.js 3D viewer component for Dioxus
-#[component]
-pub fn ThreeView(props: ThreeViewProps) -> Element {
-    let html = generate_three_js_html(&props);
 
-    rsx! {
-        iframe {
-            class: "{props.class}",
-            style: "width: 100%; height: 100%; border: none;",
-            srcdoc: "{html}",
-        }
-    }
-}
 
 /// Build loader scripts for multiple models
-fn build_loader_scripts_for_models(models: &[ModelConfig]) -> String {
+pub fn build_loader_scripts_for_models(models: &[ModelConfig]) -> String {
     let mut scripts: Vec<String> = vec![];
     let mut seen_formats: Vec<ModelFormat> = vec![];
 
@@ -380,7 +386,7 @@ fn build_loader_scripts_for_models(models: &[ModelConfig]) -> String {
 }
 
 /// Build loader scripts for single model
-fn build_loader_scripts_single(format: &ModelFormat, model_url: &Option<String>) -> String {
+pub fn build_loader_scripts_single(format: &ModelFormat, model_url: &Option<String>) -> String {
     let url = model_url.clone().unwrap_or_default();
     let has_model = !url.is_empty() && *format != ModelFormat::Cube;
     let loader_url = format.loader_url();
@@ -400,7 +406,7 @@ fn build_loader_scripts_single(format: &ModelFormat, model_url: &Option<String>)
 }
 
 /// Build JavaScript code for loading multiple models
-fn build_multi_model_loading(models: &[ModelConfig], shadows: bool) -> String {
+pub fn build_multi_model_loading(models: &[ModelConfig], shadows: bool) -> String {
     let shadows_str = shadows.to_string().to_lowercase();
 
     let load_calls: Vec<String> = models.iter().enumerate().map(|(idx, model)| {
@@ -456,7 +462,7 @@ fn build_multi_model_loading(models: &[ModelConfig], shadows: bool) -> String {
 }
 
 /// Build JavaScript code for loading a single model
-fn build_single_model_loading(
+pub fn build_single_model_loading(
     format: &ModelFormat,
     model_url: &Option<String>,
     auto_center: bool,
@@ -487,7 +493,7 @@ fn build_single_model_loading(
 }
 
 /// Generate the HTML with embedded Three.js
-fn generate_three_js_html(props: &ThreeViewProps) -> String {
+pub fn generate_three_js_html(props: &ThreeViewProps) -> String {
     let rot_x_rad = props.rot_x.to_radians();
     let rot_y_rad = props.rot_y.to_radians();
     let rot_z_rad = props.rot_z.to_radians();
@@ -726,7 +732,7 @@ fn generate_three_js_html(props: &ThreeViewProps) -> String {
 }
 
 /// Build shader code for the Three.js scene
-fn build_shader_code(shader: &ShaderPreset) -> (String, String, bool) {
+pub fn build_shader_code(shader: &ShaderPreset) -> (String, String, bool) {
     match shader {
         ShaderPreset::None => (String::new(), String::new(), false),
         _ => {

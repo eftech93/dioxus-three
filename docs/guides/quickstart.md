@@ -48,7 +48,37 @@ fn app() -> Element {
 }
 ```
 
-## 3. Interactive Controls
+## 3. Multiple Models
+
+Display multiple models simultaneously:
+
+```rust
+use dioxus::prelude::*;
+use dioxus_three::{ThreeView, ModelConfig, ModelFormat};
+
+fn app() -> Element {
+    let models = vec![
+        ModelConfig::new("", ModelFormat::Cube)
+            .with_position(-2.0, 0.0, 0.0)
+            .with_color("#ff6b6b"),
+        ModelConfig::new("https://example.com/helmet.gltf", ModelFormat::Gltf)
+            .with_position(0.0, 0.0, 0.0)
+            .with_scale(0.5),
+        ModelConfig::new("https://example.com/duck.gltf", ModelFormat::Gltf)
+            .with_position(2.0, 0.0, 0.0)
+            .with_scale(0.3),
+    ];
+    
+    rsx! {
+        ThreeView {
+            models: models,
+            auto_rotate: true,
+        }
+    }
+}
+```
+
+## 4. Interactive Controls (Desktop)
 
 Add controls to transform the model:
 
@@ -112,7 +142,80 @@ fn app() -> Element {
 }
 ```
 
-## 4. Adding Shader Effects
+## 5. Interactive Controls (Web/Mobile)
+
+For web and mobile platforms, use a wrapper component for proper signal handling:
+
+```rust
+use dioxus::prelude::*;
+use dioxus_three::{ThreeView, ModelConfig, ShaderPreset};
+
+/// Wrapper that ensures proper signal subscriptions
+#[component]
+fn ThreeViewWrapper(
+    models: Signal<Vec<ModelConfig>>,
+    cam_x: Signal<f32>,
+    cam_y: Signal<f32>,
+    cam_z: Signal<f32>,
+    auto_rotate: Signal<bool>,
+    shader: Signal<ShaderPreset>,
+) -> Element {
+    // Read signals to subscribe to changes
+    let model_configs = models.read().clone();
+    let cx = cam_x();
+    let cy = cam_y();
+    let cz = cam_z();
+    let ar = auto_rotate();
+    let sh = shader();
+    
+    rsx! {
+        ThreeView {
+            models: model_configs,
+            cam_x: cx,
+            cam_y: cy,
+            cam_z: cz,
+            auto_rotate: ar,
+            shader: sh,
+        }
+    }
+}
+
+fn app() -> Element {
+    let models = use_signal(|| vec![ModelConfig::new("", ModelFormat::Cube)]);
+    let cam_x = use_signal(|| 8.0f32);
+    let cam_y = use_signal(|| 8.0f32);
+    let cam_z = use_signal(|| 8.0f32);
+    let auto_rotate = use_signal(|| true);
+    let shader = use_signal(|| ShaderPreset::None);
+    
+    rsx! {
+        div { style: "display: flex; height: 100vh;",
+            // Controls
+            div { style: "width: 300px; padding: 20px;",
+                button {
+                    onclick: move |_| {
+                        let mut m = models.write();
+                        m.push(ModelConfig::new("", ModelFormat::Cube));
+                    },
+                    "Add Cube"
+                }
+            }
+            
+            // 3D View with wrapper
+            ThreeViewWrapper {
+                models: models,
+                cam_x: cam_x,
+                cam_y: cam_y,
+                cam_z: cam_z,
+                auto_rotate: auto_rotate,
+                shader: shader,
+            }
+        }
+    }
+}
+```
+
+## 6. Adding Shader Effects
 
 Apply a built-in shader effect:
 
@@ -131,17 +234,18 @@ fn app() -> Element {
 }
 ```
 
-## 5. Complete Example
+## 7. Complete Example
 
 A full-featured viewer with multiple controls:
 
 ```rust
 use dioxus::prelude::*;
-use dioxus_three::{ThreeView, ModelFormat, ShaderPreset};
+use dioxus_three::{ThreeView, ModelConfig, ModelFormat, ShaderPreset};
 
 fn app() -> Element {
-    let mut model_url = use_signal(|| "".to_string());
-    let mut format = use_signal(|| ModelFormat::Cube);
+    let mut models = use_signal(|| vec![
+        ModelConfig::new("", ModelFormat::Cube).with_color("#ff6b6b")
+    ]);
     let mut shader = use_signal(|| ShaderPreset::None);
     let mut auto_rotate = use_signal(|| true);
     
@@ -151,21 +255,25 @@ fn app() -> Element {
             div { style: "width: 320px; padding: 20px; background: #1a1a2e; color: white; overflow-y: auto;",
                 h1 { style: "color: #DEC647;", "3D Viewer" }
                 
-                h3 { "Model" }
-                select {
-                    onchange: move |e| {
-                        let (url, fmt) = match e.value().as_str() {
-                            "cube" => ("", ModelFormat::Cube),
-                            "obj" => ("https://threejs.org/examples/models/obj/male02/male02.obj", ModelFormat::Obj),
-                            "gltf" => ("https://threejs.org/examples/models/gltf/DamagedHelmet/glTF/DamagedHelmet.gltf", ModelFormat::Gltf),
-                            _ => ("", ModelFormat::Cube),
-                        };
-                        model_url.set(url.to_string());
-                        format.set(fmt);
-                    },
-                    option { value: "cube", "Cube" }
-                    option { value: "obj", "OBJ Character" }
-                    option { value: "gltf", "GLTF Helmet" }
+                h3 { "Add Models" }
+                div { style: "display: grid; grid-template-columns: 1fr 1fr; gap: 10px;",
+                    button {
+                        onclick: move |_| {
+                            models.write().push(ModelConfig::new("", ModelFormat::Cube));
+                        },
+                        "Cube"
+                    }
+                    button {
+                        onclick: move |_| {
+                            models.write().push(
+                                ModelConfig::new(
+                                    "https://threejs.org/examples/models/gltf/DamagedHelmet/glTF/DamagedHelmet.gltf",
+                                    ModelFormat::Gltf
+                                )
+                            );
+                        },
+                        "Helmet"
+                    }
                 }
                 
                 h3 { "Shader" }
@@ -199,8 +307,7 @@ fn app() -> Element {
             // 3D View
             div { style: "flex: 1;",
                 ThreeView {
-                    model_url: if model_url().is_empty() {{ None }} else {{ Some(model_url()) }},
-                    format: format(),
+                    models: models.read().clone(),
                     shader: shader(),
                     auto_rotate: auto_rotate(),
                     auto_center: true,
@@ -217,3 +324,4 @@ fn app() -> Element {
 - Learn about [supported formats](formats.md)
 - Explore [shader effects](shaders.md)
 - Read the [API reference](../api/threeview.md)
+- Understand the [architecture](architecture.md)

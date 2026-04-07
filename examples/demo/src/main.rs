@@ -4,7 +4,6 @@
 //! and independent controls for each model.
 
 use dioxus::prelude::*;
-use dioxus_desktop::{Config, LogicalSize, WindowBuilder};
 use dioxus_three::{ModelConfig, ModelFormat, ShaderPreset};
 
 #[derive(Clone, PartialEq, Debug)]
@@ -17,14 +16,7 @@ struct SceneModel {
 fn main() {
     tracing_subscriber::fmt::init();
 
-    dioxus_desktop::launch::launch_virtual_dom_blocking(
-        VirtualDom::new(app),
-        Config::new().with_window(
-            WindowBuilder::new()
-                .with_title("Dioxus Three Demo - Multi-Model Viewer")
-                .with_inner_size(LogicalSize::new(1600, 900)),
-        ),
-    );
+    dioxus_desktop::launch::launch(app, vec![], vec![Box::new(dioxus_desktop::Config::new())]);
 }
 
 fn app() -> Element {

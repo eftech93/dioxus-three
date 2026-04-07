@@ -1,22 +1,48 @@
 [package]
 name = "dioxus-three"
-version = "0.0.1"
+version = "0.0.2"
+rust-version = "1.76"
 edition = "2021"
 authors = ["Esteban Puello <eftech93@gmail.com>"]
-description = "A Threejs component for Dioxus Desktop applications"
+description = "A Three.js 3D model viewer for Dioxus - supports Desktop, Web (WASM), and Mobile"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/eftech93/dioxus-three"
 keywords = ["dioxus", "threejs", "3d", "graphics", "component"]
 categories = ["gui", "graphics", "rendering"]
-rust-version = "1.76"
 
 [dependencies]
-dioxus = { version = "0.5", features = ["desktop"] }
+dioxus = "0.6"
+rand = { version = "0.8", optional = true }
+
+# Desktop-specific dependencies - none needed beyond dioxus
+
+# Web-specific dependencies
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "0.3", features = [
+    "Document",
+    "Element",
+    "HtmlElement",
+    "HtmlCanvasElement",
+    "Window",
+    "console",
+    "HtmlHeadElement",
+    "HtmlCollection",
+] }
+js-sys = "0.3"
+rand = { version = "0.8", features = ["getrandom"] }
+getrandom = { version = "0.2", features = ["js"] }
 
 [dev-dependencies]
-dioxus-desktop = "0.5"
+dioxus-desktop = "0.6"
 tracing-subscriber = "0.3"
 
 [[example]]
 name = "demo"
 path = "examples/demo/src/main.rs"
+
+# Note: web-demo and mobile-demo are standalone projects
+# Run them from their respective directories:
+#   cd examples/web-demo && dx serve --platform web
+#   cd examples/mobile-demo && dx build --platform [android|ios]

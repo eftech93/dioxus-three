@@ -40,6 +40,26 @@ ThreeView {
 }
 ```
 
+#### `models`
+- **Type:** `Vec<ModelConfig>`
+- **Default:** `[]`
+- **Description:** Multiple models to display simultaneously
+
+```rust
+use dioxus_three::{ModelConfig, ModelFormat};
+
+ThreeView {
+    models: vec![
+        ModelConfig::new("", ModelFormat::Cube)
+            .with_position(0.0, 0.0, 0.0)
+            .with_color("#ff6b6b"),
+        ModelConfig::new("https://example.com/helmet.gltf", ModelFormat::Gltf)
+            .with_position(2.0, 0.0, 0.0)
+            .with_scale(0.5),
+    ],
+}
+```
+
 #### `auto_center`
 - **Type:** `bool`
 - **Default:** `true`
@@ -251,18 +271,22 @@ ThreeView {
 
 ```rust
 use dioxus::prelude::*;
-use dioxus_three::{ThreeView, ModelFormat, ShaderPreset};
+use dioxus_three::{ThreeView, ModelConfig, ModelFormat, ShaderPreset};
 
 fn app() -> Element {
     rsx! {
         ThreeView {
-            // Model
-            model_url: Some("https://example.com/model.glb".to_string()),
-            format: ModelFormat::Glb,
-            auto_center: true,
-            auto_scale: true,
+            // Multiple models
+            models: vec![
+                ModelConfig::new("", ModelFormat::Cube)
+                    .with_position(0.0, 0.0, 0.0)
+                    .with_color("#ff6b6b"),
+                ModelConfig::new("https://example.com/helmet.gltf", ModelFormat::Gltf)
+                    .with_position(2.0, 0.0, 0.0)
+                    .with_scale(0.5),
+            ],
             
-            // Transform
+            // Transform (applies to all models unless overridden in ModelConfig)
             pos_x: 0.0,
             pos_y: 0.0,
             pos_z: 0.0,
@@ -293,8 +317,24 @@ fn app() -> Element {
 }
 ```
 
+## Platform Notes
+
+### Desktop
+- Uses WebView with iframe
+- Full HTML regeneration on prop changes
+
+### Web (WASM)
+- Uses HTML5 Canvas
+- Real-time state synchronization
+- Requires signal-based wrapper for updates
+
+### Mobile
+- Uses WebView (same as desktop)
+- Touch-friendly controls
+
 ## See Also
 
 - [ModelFormat](modelformat.md) - Supported model formats
 - [ShaderPreset](shaderpreset.md) - Built-in shader effects
 - [ShaderConfig](shaderconfig.md) - Custom shader configuration
+- [ModelConfig](../guides/models.md) - Multi-model configuration

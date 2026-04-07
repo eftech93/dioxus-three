@@ -1,0 +1,25 @@
+[package]
+name = "dioxus-three-mobile-demo"
+version = "0.1.0"
+edition = "2021"
+authors = ["Esteban Puello <eftech93@gmail.com>"]
+description = "Mobile demo for Dioxus Three - 3D model viewer"
+
+[dependencies]
+dioxus-three = { path = "../.." }
+dioxus = { version = "0.6", features = ["mobile"] }
+dioxus-mobile = "0.6"
+tokio = { version = "1", features = ["full"] }
+
+[[bin]]
+name = "dioxus-three-mobile-demo"
+path = "src/main.rs"
+
+# Android-specific configuration
+[target.'cfg(target_os = "android")'.dependencies]
+android_logger = "0.14"
+log = "0.4"
+
+# iOS-specific configuration
+[target.'cfg(target_os = "ios")'.dependencies]
+objc = "0.2"

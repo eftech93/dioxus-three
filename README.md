@@ -1,16 +1,20 @@
-# Dioxus Three
+# Dioxus Three v0.0.2
 
 [![Docs](https://img.shields.io/badge/docs-online-brightgreen)](./docs)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)](LICENSE)
 
-A Three.js 3D model viewer component for Dioxus Desktop applications with support for custom GLSL shaders.
+A Three.js 3D model viewer component for Dioxus applications with support for custom GLSL shaders.
+
+Works on **Desktop** (WebView), **Web** (WASM/canvas), and **Mobile** platforms.
 
 📚 **[Full Documentation](docs/README.md)** | 🎮 **[Demo](examples/demo)** | 🐙 **[GitHub](https://github.com/eftech93/dioxus-three)**
 
 ## Features
 
+- 🖥️ **Multi-Platform** - Desktop (Windows/macOS/Linux), Web (WASM), Mobile (iOS/Android)
 - 🎮 **Interactive 3D** - Render and control 3D models with ease
 - 📁 **Multiple Formats** - Supports OBJ, FBX, GLTF, GLB, STL, PLY, DAE
+- 📦 **Multi-Model** - Load and display multiple models simultaneously
 - 🎨 **Custom Shaders** - Built-in shader presets + custom GLSL support
 - 🌊 **Shader Effects** - Gradient, Water, Hologram, Toon, Heatmap
 - 📷 **Camera Control** - Adjustable camera position and target
@@ -37,7 +41,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-dioxus-three = "0.1"
+dioxus-three = "0.0.2"
 dioxus = { version = "0.5", features = ["desktop"] }
 ```
 
@@ -74,6 +78,31 @@ fn app() -> Element {
             auto_center: true,
             auto_scale: true,
             show_grid: true,
+        }
+    }
+}
+```
+
+### Multiple Models
+
+```rust
+use dioxus::prelude::*;
+use dioxus_three::{ThreeView, ModelConfig, ModelFormat};
+
+fn app() -> Element {
+    let models = vec![
+        ModelConfig::new("", ModelFormat::Cube)
+            .with_position(0.0, 0.0, 0.0)
+            .with_color("#ff6b6b"),
+        ModelConfig::new("https://example.com/helmet.gltf", ModelFormat::Gltf)
+            .with_position(2.0, 0.0, 0.0)
+            .with_scale(0.5),
+    ];
+    
+    rsx! {
+        ThreeView {
+            models: models,
+            auto_rotate: true,
         }
     }
 }
@@ -138,6 +167,28 @@ fn app() -> Element {
 }
 ```
 
+## Platform-Specific Usage
+
+### Desktop
+
+```rust
+dioxus_desktop::launch(app);
+```
+
+### Web (WASM)
+
+```rust
+// Build with: dx build --platform web
+dioxus_web::launch(app);
+```
+
+### Mobile
+
+```rust
+// Build with: dx build --platform [android|ios]
+dioxus_mobile::launch(app, vec![], Config::default());
+```
+
 ## Shader Presets
 
 | Preset | Description | Animated |
@@ -158,6 +209,7 @@ fn app() -> Element {
 |------|------|---------|-------------|
 | `model_url` | `Option<String>` | `None` | URL or path to 3D model file |
 | `format` | `ModelFormat` | `ModelFormat::Cube` | Model file format |
+| `models` | `Vec<ModelConfig>` | `[]` | Multiple models to display |
 | `auto_center` | `bool` | `true` | Auto-center model on load |
 | `auto_scale` | `bool` | `false` | Auto-scale to fit viewport |
 
@@ -209,20 +261,44 @@ fn app() -> Element {
 |------|------|---------|-------------|
 | `class` | `String` | `""` | Additional CSS classes |
 
-## Demo
+## Examples
 
-Run the demo application:
+### Desktop Demo
 
 ```bash
 cd examples/demo
 cargo run
 ```
 
-The demo includes:
+### Web Demo (WASM)
+
+```bash
+cd examples/web-demo
+
+# Install Dioxus CLI if needed: cargo install dioxus-cli
+dx serve --platform web
+```
+
+### Mobile Demo (iOS/Android)
+
+```bash
+cd examples/mobile-demo
+
+# Android
+dx build --platform android
+
+# iOS (macOS only)
+dx build --platform ios
+```
+
+See [examples/README.md](examples/README.md) for more details.
+
+All demos include:
 - Format selector (OBJ, FBX, GLTF, etc.)
 - Model URL input
 - Preset models
 - **Shader effects selector**
+- **Multi-model support**
 - Transform controls
 - Appearance controls
 - Camera controls
@@ -279,8 +355,12 @@ Then use `http://localhost:8080/model.obj` as the URL.
 
 ## Requirements
 
-- Dioxus Desktop 0.5+
+- Dioxus 0.5+
 - Internet connection (for Three.js CDN and external models)
+
+## Changelog
+
+See [CHANGELOG.md](docs/changelog.md) for version history.
 
 ## Author
 

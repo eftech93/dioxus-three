@@ -1,4 +1,4 @@
-# Dioxus Three <small>v0.0.1</small>
+# Dioxus Three <small>v0.0.2</small>
 
 > 3D Model Viewer for Dioxus Desktop
 
