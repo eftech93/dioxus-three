@@ -1,4 +1,4 @@
-# Dioxus Three Documentation v0.0.2
+# Dioxus Three Documentation v0.0.3
 
 A **Three.js 3D model viewer component** for Dioxus applications with support for custom GLSL shaders.
 
@@ -278,6 +278,46 @@ fn app() -> Element {
 |------|------|---------|-------------|
 | `class` | `String` | `""` | Additional CSS classes |
 
+## Dynamic Scene Properties
+
+Control scene properties in real-time using Dioxus signals:
+
+```rust
+fn app() -> Element {
+    let mut cam_x = use_signal(|| 8.0f32);
+    let mut show_grid = use_signal(|| true);
+    
+    rsx! {
+        div { style: "display: flex; height: 100vh;",
+            div { style: "width: 250px; padding: 20px;",
+                input {
+                    r#type: "range",
+                    min: "-30",
+                    max: "30",
+                    value: "{cam_x()}",
+                    oninput: move |e| cam_x.set(e.value().parse().unwrap_or(8.0))
+                }
+                label {
+                    input {
+                        r#type: "checkbox",
+                        checked: "{show_grid()}",
+                        onchange: move |e| show_grid.set(e.checked())
+                    }
+                    "Show Grid"
+                }
+            }
+            
+            ThreeView {
+                cam_x: cam_x(),
+                show_grid: show_grid(),
+            }
+        }
+    }
+}
+```
+
+See [Managing Scene Properties](guides/scene-properties.md) for comprehensive examples including camera controls, transforms, animations, and shader switching.
+
 ## Demo
 
 Run the demo application:
@@ -293,6 +333,7 @@ The demo includes:
 - Preset models
 - **Shader effects selector**
 - **Multi-model support**
+- **Dynamic scene property controls**
 - Transform controls
 - Appearance controls
 - Camera controls

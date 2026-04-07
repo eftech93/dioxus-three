@@ -5,6 +5,21 @@ All notable changes to Dioxus Three will be documented in this file.
 **Maintainer:** Esteban Puello - [eftech93@gmail.com](mailto:eftech93@gmail.com)  
 **Repository:** [github.com/eftech93/dioxus-three](https://github.com/eftech93/dioxus-three)
 
+## [0.0.3] - 2024-04-07
+
+### Fixed
+
+- **Web Platform Camera Controls** - Fixed camera position not updating in web demo
+  - Camera object now properly stored in `dioxusThreeState`
+  - Immediate camera position updates when state changes
+  - Fixed camera reference access in JavaScript animation loop
+
+### Technical
+
+- Updated `dioxusThreeState` to include camera reference
+- Added immediate camera position synchronization in state update handler
+- Enhanced debug logging for camera position tracking
+
 ## [0.0.2] - 2024-04-07
 
 ### Added
@@ -98,6 +113,7 @@ All notable changes to Dioxus Three will be documented in this file.
 
 | Version | Date | Description |
 |---------|------|-------------|
+| 0.0.3 | 2024-04-07 | Fixed web platform camera controls |
 | 0.0.2 | 2024-04-07 | Web platform support, multi-model support |
 | 0.0.1 | 2024-04-05 | Initial release |
 

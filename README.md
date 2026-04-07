@@ -1,4 +1,4 @@
-# Dioxus Three v0.0.2
+# Dioxus Three v0.0.3
 
 [![Docs](https://img.shields.io/badge/docs-online-brightgreen)](./docs)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)](LICENSE)
@@ -41,7 +41,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-dioxus-three = "0.0.2"
+dioxus-three = "0.0.3"
 dioxus = { version = "0.5", features = ["desktop"] }
 ```
 

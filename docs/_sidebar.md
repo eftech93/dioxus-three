@@ -8,6 +8,7 @@
   - [Loading Models](guides/models.md)
   - [Transform Controls](guides/transform.md)
   - [Camera Control](guides/camera.md)
+  - [Managing Scene Properties](guides/scene-properties.md)
   - [Shader Effects](guides/shaders.md)
   - [Custom Shaders](guides/custom-shaders.md)
 

@@ -148,7 +148,7 @@ pub fn ThreeView(props: ThreeViewProps) -> Element {
                     return;
                 }}
                 
-                const state = canvas.dioxusThreeState;
+                const {{ state, camera }} = canvas.dioxusThreeState;
                 
                 state.camX = {};
                 state.camY = {};
@@ -168,7 +168,14 @@ pub fn ThreeView(props: ThreeViewProps) -> Element {
                 state.showAxes = {};
                 state.wireframe = {};
                 
-                console.log('JS state updated:', {{ scale: state.scale, autoRotate: state.autoRotate }});
+                // Update camera position immediately
+                if (camera) {{
+                    camera.position.set(state.camX, state.camY, state.camZ);
+                    camera.lookAt(state.targetX, state.targetY, state.targetZ);
+                    console.log('Camera position updated:', state.camX, state.camY, state.camZ);
+                }}
+                
+                console.log('JS state updated:', {{ camX: state.camX, camY: state.camY, camZ: state.camZ, scale: state.scale, autoRotate: state.autoRotate }});
             }})();
             "#,
             id,
@@ -483,7 +490,7 @@ fn create_scene(canvas: &web_sys::Element) {
                     camera.updateProjectionMatrix();
                 }});
                 
-                canvas.dioxusThreeState = {{ scene, modelContainer, state }};
+                canvas.dioxusThreeState = {{ scene, camera, modelContainer, state }};
                 
                 console.log('Dioxus Three: Scene initialized');
             }}
