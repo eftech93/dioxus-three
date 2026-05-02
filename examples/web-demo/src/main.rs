@@ -1,135 +1,303 @@
 //! Dioxus Three - Web Demo
 //!
-//! A web-optimized demo showing the ThreeView component with Dioxus Web.
-//! Run with: `dx serve --platform web`
+//! A comprehensive web demo showing all features including Phase 1:
+//! Raycasting, Selection, and Transform Gizmos
 
+use std::collections::HashMap;
 use dioxus::prelude::*;
 use dioxus_three::{ModelConfig, ModelFormat, ShaderPreset};
+use dioxus_three::{Selection, Gizmo, GizmoMode, GizmoSpace, EntityId, GizmoTransform};
 
-/// Wrapper component that takes signals and subscribes to them properly
-/// This ensures the ThreeView re-renders when any signal changes
-#[component]
-fn ThreeViewWrapper(
-    models: Signal<Vec<SceneModel>>,
-    cam_x: Signal<f32>,
-    cam_y: Signal<f32>,
-    cam_z: Signal<f32>,
-    auto_rotate: Signal<bool>,
-    rot_speed: Signal<f32>,
-    show_grid: Signal<bool>,
-    show_axes: Signal<bool>,
-    shader: Signal<ShaderPreset>,
-) -> Element {
-    // Build model configs from signal - this will re-run when models changes
-    let model_configs: Vec<ModelConfig> = models.read().iter().map(|m| m.config.clone()).collect();
-    
-    // Reading all signals here ensures this component re-renders when they change
-    let cx = cam_x();
-    let cy = cam_y();
-    let cz = cam_z();
-    let ar = auto_rotate();
-    let rs = rot_speed();
-    let sg = show_grid();
-    let sa = show_axes();
-    let _sh = shader();
-    
-    rsx! {
-        dioxus_three::ThreeView {
-            models: model_configs,
-            cam_x: cx,
-            cam_y: cy,
-            cam_z: cz,
-            auto_rotate: ar,
-            rot_speed: rs,
-            show_grid: sg,
-            show_axes: sa,
-            shader: _sh,
-        }
-    }
+#[derive(Clone, PartialEq, Debug)]
+struct SceneModel {
+    id: usize,
+    name: String,
+    config: ModelConfig,
 }
 
 fn main() {
-    // Initialize console error panic hook for better debugging
-    #[cfg(target_arch = "wasm32")]
-    console_error_panic_hook::set_once();
-
-    launch(app);
+    tracing_wasm::set_as_global_default();
+    dioxus::launch(app);
 }
 
 fn app() -> Element {
-    // Scene state
-    let mut models = use_signal(|| {
-        vec![SceneModel {
-            id: 0,
-            name: "Cube".to_string(),
-            config: ModelConfig::new("", ModelFormat::Cube).with_color("#ff6b6b"),
-        }]
-    });
-    let mut next_id = use_signal(|| 1usize);
-    let mut selected_model = use_signal(|| 0usize);
+    // Scene models - start with 3 colored cubes
+    let mut models = use_signal(|| vec![
+        SceneModel { 
+            id: 0, 
+            name: "Red Cube".to_string(), 
+            config: ModelConfig::new("", ModelFormat::Cube)
+                .with_position(-2.0, 0.0, 0.0)
+                .with_color("#ff6b6b") 
+        },
+        SceneModel { 
+            id: 1, 
+            name: "Green Cube".to_string(), 
+            config: ModelConfig::new("", ModelFormat::Cube)
+                .with_position(0.0, 0.0, 0.0)
+                .with_color("#6bcf7f") 
+        },
+        SceneModel { 
+            id: 2, 
+            name: "Blue Cube".to_string(), 
+            config: ModelConfig::new("", ModelFormat::Cube)
+                .with_position(2.0, 0.0, 0.0)
+                .with_color("#4dabf7") 
+        },
+    ]);
+    let mut next_id = use_signal(|| 3usize);
 
     // Camera state
     let mut cam_x = use_signal(|| 8.0f32);
     let mut cam_y = use_signal(|| 8.0f32);
     let mut cam_z = use_signal(|| 8.0f32);
 
+    // Phase 1: Selection and Gizmo state
+    let mut selection = use_signal(|| Selection::new());
+    let mut gizmo_mode = use_signal(|| GizmoMode::Translate);
+    let mut gizmo_space = use_signal(|| GizmoSpace::World);
+    let mut show_gizmo = use_signal(|| true);
+
+    // Track transform overrides from gizmo drags
+    let mut transform_overrides = use_signal(|| HashMap::<usize, GizmoTransform>::new());
+
     // Global options
-    let mut auto_rotate = use_signal(|| true);
+    let mut auto_rotate = use_signal(|| false);
     let mut rot_speed = use_signal(|| 1.0f32);
     let mut show_grid = use_signal(|| true);
     let mut show_axes = use_signal(|| true);
     let mut shader = use_signal(|| ShaderPreset::None);
-    let mut sidebar_open = use_signal(|| true);
+    let mut wireframe = use_signal(|| false);
+
+    // New model form
+    let mut new_url = use_signal(|| "".to_string());
+    let mut new_format = use_signal(|| ModelFormat::Obj);
+    let mut new_name = use_signal(|| "".to_string());
+
+    // Sidebar for mobile
+    let mut sidebar_open = use_signal(|| false);
+
+    let preset_models = vec![
+        ("Cube", "", ModelFormat::Cube),
+        ("Helmet (glTF)", "https://threejs.org/examples/models/gltf/DamagedHelmet/glTF/DamagedHelmet.gltf", ModelFormat::Gltf),
+        ("Duck (glTF)", "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Duck/glTF/Duck.gltf", ModelFormat::Gltf),
+    ];
+
+    let model_configs: Vec<ModelConfig> = models.read().iter().enumerate().map(|(idx, m)| {
+        let mut config = m.config.clone();
+        if let Some(override_tf) = transform_overrides.read().get(&idx) {
+            config.pos_x = override_tf.position.x;
+            config.pos_y = override_tf.position.y;
+            config.pos_z = override_tf.position.z;
+            config.rot_x = override_tf.rotation.x.to_degrees();
+            config.rot_y = override_tf.rotation.y.to_degrees();
+            config.rot_z = override_tf.rotation.z.to_degrees();
+            config.scale = override_tf.scale.x;
+        }
+        config
+    }).collect();
 
     rsx! {
         link { rel: "stylesheet", href: "https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" }
 
-        div { class: "flex flex-col h-screen w-screen bg-gray-900 text-white font-sans overflow-hidden",
-            // Header
-            header { class: "bg-gray-800 p-3 flex items-center justify-between shadow-lg flex-shrink-0 h-14",
-                h1 { class: "text-lg font-bold text-yellow-500", "🎮 Dioxus Three - Web Demo" }
+        div { class: "h-screen bg-gray-900 text-white font-sans overflow-hidden",
+            // Header (mobile only)
+            div { class: "lg:hidden flex items-center justify-between p-3 bg-gray-800 border-b border-gray-700",
+                h1 { class: "text-lg font-bold text-yellow-500", "🎮 Dioxus Three" }
                 button {
-                    class: "md:hidden bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-sm",
+                    class: "text-white",
                     onclick: move |_| sidebar_open.set(!sidebar_open()),
-                    if sidebar_open() { "✕ Hide" } else { "☰ Show" }
+                    if sidebar_open() {
+                        "✕ Close"
+                    } else {
+                        "☰ Menu"
+                    }
                 }
             }
 
-            // Main content - side by side layout
-            div { class: "flex flex-1 overflow-hidden w-full",
-                // LEFT: Control Panel - Fixed width, always visible on desktop
-                aside {
-                    class: if sidebar_open() {
-                        "w-80 flex-shrink-0 bg-gray-800 p-4 overflow-y-auto shadow-xl h-full"
-                    } else {
-                        "hidden w-80 flex-shrink-0 bg-gray-800 p-4 overflow-y-auto shadow-xl h-full md:block"
+            div { class: "flex h-[calc(100vh-60px)] lg:h-screen",
+                // Sidebar
+                div {
+                    class: if sidebar_open() { 
+                        "w-full lg:w-[450px] bg-gray-800 p-4 overflow-y-auto shadow-2xl absolute lg:relative z-10 h-full" 
+                    } else { 
+                        "hidden lg:block w-[450px] bg-gray-800 p-4 overflow-y-auto shadow-2xl flex-shrink-0" 
                     },
+                    
+                    h1 { class: "text-xl font-bold mb-4 text-yellow-500 hidden lg:block", "🎮 Dioxus Three Demo" }
+                    p { class: "text-xs text-gray-400 mb-4", "v0.0.3 - Phase 1: Raycasting, Selection & Gizmos" }
+
+                    // Phase 1: Selection Section
+                    ControlGroup { title: "🎯 Selection (Phase 1)",
+                        div { class: "flex gap-2 mb-3",
+                            button {
+                                class: "flex-1 bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded text-sm font-medium transition",
+                                onclick: move |_| selection.write().clear(),
+                                "Clear Selection"
+                            }
+                            button {
+                                class: "flex-1 bg-green-600 hover:bg-green-700 px-3 py-2 rounded text-sm font-medium transition",
+                                onclick: move |_| {
+                                    for i in 0..models().len() {
+                                        selection.write().select(EntityId(i));
+                                    }
+                                },
+                                "Select All"
+                            }
+                        }
+                        
+                        p { class: "text-sm text-gray-400 mb-2", 
+                            "Selected: {selection().count()} object(s)" 
+                        }
+                        
+                        // Selected items list with model names
+                        for id in selection().iter() {
+                            {
+                                let model_name = models().get(id.0).map(|m| m.name.clone()).unwrap_or_else(|| format!("Object {}", id.0));
+                                let is_primary = selection().primary() == Some(id);
+                                rsx! {
+                                    div { 
+                                        class: if is_primary { 
+                                            "bg-yellow-600 rounded px-3 py-2 mb-1 text-sm flex items-center gap-2 border-2 border-yellow-400" 
+                                        } else { 
+                                            "bg-gray-600 rounded px-3 py-2 mb-1 text-sm flex items-center gap-2 border border-gray-500" 
+                                        },
+                                        div { class: "flex items-center gap-2 flex-1",
+                                            span { class: "text-yellow-300 text-lg", "★" }
+                                            div { class: "flex flex-col",
+                                                span { class: "font-medium", "{model_name}" }
+                                                span { class: "text-xs text-gray-300", "Entity {id}" }
+                                            }
+                                        }
+                                        if is_primary {
+                                            span { class: "text-xs bg-yellow-700 px-2 py-1 rounded", "Primary" }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        if !selection().has_selection() {
+                            div { class: "text-xs text-gray-500 italic bg-gray-700 rounded p-3",
+                                p { "💡 Click objects to select" }
+                                p { "💡 Shift+click for multi-select" }
+                                p { class: "mt-1", "💡 Yellow border appears around selected items" }
+                            }
+                        } else {
+                            div { class: "text-xs text-gray-400 mt-2 bg-gray-700 rounded p-2",
+                                p { "🎯 Primary selection (★) controls the gizmo" }
+                                p { "📦 Selected items show yellow border + corners in 3D view" }
+                            }
+                            
+                            // Transform readout for primary selection
+                            if let Some(primary_id) = selection().primary() {
+                                {
+                                    let idx = primary_id.0;
+                                    let transform = transform_overrides.read().get(&idx).cloned();
+                                    let model = models.read().get(idx).cloned();
+                                    if let Some(model) = model {
+                                        let pos = transform.map(|t| t.position)
+                                            .unwrap_or_else(|| dioxus_three::Vector3::new(model.config.pos_x, model.config.pos_y, model.config.pos_z));
+                                        let rot = transform.map(|t| t.rotation)
+                                            .unwrap_or_else(|| dioxus_three::Vector3::new(model.config.rot_x.to_radians(), model.config.rot_y.to_radians(), model.config.rot_z.to_radians()));
+                                        let scl = transform.map(|t| t.scale)
+                                            .unwrap_or_else(|| dioxus_three::Vector3::new(model.config.scale, model.config.scale, model.config.scale));
+                                        
+                                        rsx! {
+                                            div { class: "mt-2 bg-gray-900 rounded p-2 text-xs font-mono space-y-1",
+                                                p { class: "text-gray-400 font-medium", "📐 Transform" }
+                                                p { class: "text-green-400", "Pos: {pos.x:.2}, {pos.y:.2}, {pos.z:.2}" }
+                                                p { class: "text-blue-400", "Rot: {rot.x:.2}, {rot.y:.2}, {rot.z:.2}" }
+                                                p { class: "text-red-400", "Scl: {scl.x:.2}, {scl.y:.2}, {scl.z:.2}" }
+                                            }
+                                        }
+                                    } else {
+                                        rsx! {}
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Phase 1: Gizmo Section
+                    ControlGroup { title: "🔧 Transform Gizmo (Phase 1)",
+                        Toggle { label: "Show Gizmo", value: show_gizmo }
+                        
+                        if show_gizmo() {
+                            div { class: "mt-3 space-y-3",
+                                div {
+                                    label { class: "block text-xs text-gray-400 mb-1", "Mode" }
+                                    div { class: "grid grid-cols-3 gap-2",
+                                        GizmoModeButton { 
+                                            label: "Move", 
+                                            active: matches!(gizmo_mode(), GizmoMode::Translate),
+                                            onclick: move |_| gizmo_mode.set(GizmoMode::Translate)
+                                        }
+                                        GizmoModeButton { 
+                                            label: "Rotate", 
+                                            active: matches!(gizmo_mode(), GizmoMode::Rotate),
+                                            onclick: move |_| gizmo_mode.set(GizmoMode::Rotate)
+                                        }
+                                        GizmoModeButton { 
+                                            label: "Scale", 
+                                            active: matches!(gizmo_mode(), GizmoMode::Scale),
+                                            onclick: move |_| gizmo_mode.set(GizmoMode::Scale)
+                                        }
+                                    }
+                                }
+                                
+                                div {
+                                    label { class: "block text-xs text-gray-400 mb-1", "Space" }
+                                    div { class: "grid grid-cols-2 gap-2",
+                                        button {
+                                            class: if matches!(gizmo_space(), GizmoSpace::World) { 
+                                                "bg-yellow-600 hover:bg-yellow-700 px-3 py-2 rounded text-sm transition" 
+                                            } else { 
+                                                "bg-gray-600 hover:bg-gray-500 px-3 py-2 rounded text-sm transition" 
+                                            },
+                                            onclick: move |_| gizmo_space.set(GizmoSpace::World),
+                                            "World"
+                                        }
+                                        button {
+                                            class: if matches!(gizmo_space(), GizmoSpace::Local) { 
+                                                "bg-yellow-600 hover:bg-yellow-700 px-3 py-2 rounded text-sm transition" 
+                                            } else { 
+                                                "bg-gray-600 hover:bg-gray-500 px-3 py-2 rounded text-sm transition" 
+                                            },
+                                            onclick: move |_| gizmo_space.set(GizmoSpace::Local),
+                                            "Local"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     // Models Section
                     ControlGroup { title: "📦 Scene Models",
-                        // Model list
                         div { class: "mb-3 max-h-32 overflow-y-auto",
                             for (idx, model) in models().iter().enumerate() {
                                 div {
-                                    class: if idx == selected_model() {
-                                        "flex items-center justify-between p-2 bg-yellow-600 rounded mb-1 cursor-pointer"
-                                    } else {
-                                        "flex items-center justify-between p-2 bg-gray-700 rounded mb-1 cursor-pointer hover:bg-gray-600"
+                                    class: if selection().is_selected(EntityId(idx)) { 
+                                        "flex items-center justify-between p-2 bg-yellow-600 rounded mb-1 cursor-pointer" 
+                                    } else { 
+                                        "flex items-center justify-between p-2 bg-gray-700 rounded mb-1 cursor-pointer hover:bg-gray-600" 
                                     },
-                                    onclick: move |_| selected_model.set(idx),
+                                    onclick: move |_| {
+                                        selection.write().toggle(EntityId(idx));
+                                    },
                                     div { class: "flex items-center gap-2",
                                         span { class: "text-sm font-medium", "{model.name}" }
-                                        span { class: "text-xs text-gray-300", "({model.config.format.as_str()})" }
+                                        span { class: "text-xs text-gray-400", "({model.config.format.as_str()})" }
                                     }
                                     button {
-                                        class: "text-red-300 hover:text-red-200 text-xs",
+                                        class: "text-red-400 hover:text-red-300 text-xs",
                                         onclick: move |e: Event<MouseData>| {
                                             e.stop_propagation();
                                             let mut current = models.write();
                                             if current.len() > 1 {
                                                 current.remove(idx);
-                                                if selected_model() >= current.len() {
-                                                    selected_model.set(current.len() - 1);
-                                                }
+                                                selection.write().deselect(EntityId(idx));
                                             }
                                         },
                                         "✕"
@@ -138,21 +306,88 @@ fn app() -> Element {
                             }
                         }
 
-                        // Quick preset models
-                        div { class: "grid grid-cols-2 gap-2",
-                            PresetButton { name: "Cube", format: ModelFormat::Cube, url: "", models, next_id, selected_model }
-                            PresetButton { name: "Male (OBJ)", format: ModelFormat::Obj, url: "https://threejs.org/examples/models/obj/male02/male02.obj", models, next_id, selected_model }
-                            PresetButton { name: "Helmet (glTF)", format: ModelFormat::Gltf, url: "https://threejs.org/examples/models/gltf/DamagedHelmet/glTF/DamagedHelmet.gltf", models, next_id, selected_model }
-                            PresetButton { name: "Duck (glTF)", format: ModelFormat::Gltf, url: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Duck/glTF/Duck.gltf", models, next_id, selected_model }
+                        // Add Model Form
+                        div { class: "border-t border-gray-600 pt-3 mt-3",
+                            h4 { class: "text-xs font-medium text-gray-400 mb-2", "Add New Model" }
+
+                            input {
+                                r#type: "text",
+                                value: "{new_name()}",
+                                placeholder: "Model name",
+                                oninput: move |e| new_name.set(e.value()),
+                                class: "w-full bg-gray-700 rounded px-2 py-1 text-sm mb-2"
+                            }
+
+                            select {
+                                class: "w-full bg-gray-700 rounded px-2 py-1 text-sm mb-2",
+                                onchange: move |e| {
+                                    new_format.set(match e.value().as_str() {
+                                        "obj" => ModelFormat::Obj,
+                                        "gltf" => ModelFormat::Gltf,
+                                        "glb" => ModelFormat::Glb,
+                                        "fbx" => ModelFormat::Fbx,
+                                        "stl" => ModelFormat::Stl,
+                                        _ => ModelFormat::Cube,
+                                    });
+                                },
+                                option { value: "cube", "Cube (Default)" }
+                                option { value: "obj", "OBJ" }
+                                option { value: "gltf", "glTF" }
+                                option { value: "glb", "GLB" }
+                                option { value: "fbx", "FBX" }
+                                option { value: "stl", "STL" }
+                            }
+
+                            input {
+                                r#type: "text",
+                                value: "{new_url()}",
+                                placeholder: "https://example.com/model.obj (optional)",
+                                oninput: move |e| new_url.set(e.value()),
+                                class: "w-full bg-gray-700 rounded px-2 py-1 text-sm mb-2"
+                            }
+
+                            div { class: "grid grid-cols-2 gap-1 mb-2",
+                                for (name, url, fmt) in preset_models.clone().into_iter() {
+                                    button {
+                                        class: "bg-gray-600 hover:bg-gray-500 px-2 py-1 rounded text-xs text-left transition",
+                                        onclick: move |_| {
+                                            new_name.set(name.to_string());
+                                            new_url.set(url.to_string());
+                                            new_format.set(fmt.clone());
+                                        },
+                                        "{name}"
+                                    }
+                                }
+                            }
+
+                            button {
+                                class: "w-full bg-green-600 hover:bg-green-700 px-3 py-2 rounded text-sm font-medium transition",
+                                onclick: move |_| {
+                                    let id = next_id();
+                                    let name = if new_name().is_empty() { 
+                                        format!("Model {}", id) 
+                                    } else { 
+                                        new_name() 
+                                    };
+                                    let url = new_url();
+                                    let fmt = new_format();
+                                    
+                                    models.write().push(SceneModel {
+                                        id,
+                                        name,
+                                        config: ModelConfig::new(url, fmt).with_color("#ff6b6b"),
+                                    });
+                                    next_id += 1;
+                                    new_name.set("".to_string());
+                                    new_url.set("".to_string());
+                                },
+                                "➕ Add Model"
+                            }
                         }
                     }
 
-                    // Selected Model Controls
-                    SelectedModelControls { models, selected_idx: selected_model() }
-
                     // Global Settings
                     ControlGroup { title: "🌍 Global Settings",
-                        // Shader selector
                         div { class: "mb-3",
                             label { class: "block text-xs text-gray-400 mb-1", "Shader Effect" }
                             select {
@@ -182,6 +417,7 @@ fn app() -> Element {
                         }
                         Toggle { label: "Show Grid", value: show_grid }
                         Toggle { label: "Show Axes", value: show_axes }
+                        Toggle { label: "Wireframe", value: wireframe }
                     }
 
                     // Camera Section
@@ -192,17 +428,17 @@ fn app() -> Element {
 
                         div { class: "grid grid-cols-3 gap-2 mt-2",
                             button {
-                                class: "bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded text-xs",
+                                class: "bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded text-xs transition",
                                 onclick: move |_| { cam_x.set(0.0); cam_y.set(15.0); cam_z.set(0.01); },
                                 "Top"
                             }
                             button {
-                                class: "bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded text-xs",
+                                class: "bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded text-xs transition",
                                 onclick: move |_| { cam_x.set(15.0); cam_y.set(0.0); cam_z.set(0.0); },
                                 "Side"
                             }
                             button {
-                                class: "bg-green-600 hover:bg-green-700 px-2 py-1 rounded text-xs",
+                                class: "bg-green-600 hover:bg-green-700 px-2 py-1 rounded text-xs transition",
                                 onclick: move |_| { cam_x.set(10.0); cam_y.set(10.0); cam_z.set(10.0); },
                                 "Iso"
                             }
@@ -212,19 +448,19 @@ fn app() -> Element {
                     // Actions
                     ControlGroup { title: "📍 Actions",
                         button {
-                            class: "w-full bg-red-600 hover:bg-red-700 px-3 py-2 rounded text-sm font-medium transition mb-2",
+                            class: "w-full bg-red-600 hover:bg-red-700 px-3 py-2 rounded text-sm font-medium transition",
                             onclick: move |_| {
                                 models.set(vec![
                                     SceneModel {
                                         id: 0,
                                         name: "Cube".to_string(),
-                                        config: ModelConfig::new("", ModelFormat::Cube)
-                                            .with_color("#ff6b6b"),
+                                        config: ModelConfig::new("", ModelFormat::Cube).with_color("#ff6b6b"),
                                     }
                                 ]);
-                                selected_model.set(0);
+                                selection.write().clear();
+                                next_id.set(1);
                                 cam_x.set(8.0); cam_y.set(8.0); cam_z.set(8.0);
-                                auto_rotate.set(true);
+                                auto_rotate.set(false);
                                 shader.set(ShaderPreset::None);
                             },
                             "🗑️ Reset Scene"
@@ -233,38 +469,67 @@ fn app() -> Element {
 
                     // Info
                     div { class: "mt-4 p-3 bg-gray-900 rounded text-xs text-gray-400",
-                        p { "Dioxus Three - Web Demo" }
-                        p { "Models: {models().len()}" }
+                        p { "Dioxus Three v0.0.3" }
+                        p { "Models: {models().len()} | Selected: {selection().count()}" }
                     }
                 }
 
-                // RIGHT: 3D Renderer (Three.js Canvas) - Takes remaining space
-                main { class: "flex-1 relative bg-black h-full w-full min-w-0",
-                    div { class: "absolute inset-0 w-full h-full",
-                        // Key: Pass signals directly so component subscribes to them
-                        ThreeViewWrapper {
-                            models: models,
-                            cam_x: cam_x,
-                            cam_y: cam_y,
-                            cam_z: cam_z,
-                            auto_rotate: auto_rotate,
-                            rot_speed: rot_speed,
-                            show_grid: show_grid,
-                            show_axes: show_axes,
-                            shader: shader,
-                        }
+                // Right - Three.js View
+                div { class: "flex-1 relative bg-black",
+                    dioxus_three::ThreeView {
+                        models: model_configs,
+                        cam_x: cam_x(),
+                        cam_y: cam_y(),
+                        cam_z: cam_z(),
+                        auto_rotate: auto_rotate(),
+                        rot_speed: rot_speed(),
+                        show_grid: show_grid(),
+                        show_axes: show_axes(),
+                        shader: shader(),
+                        wireframe: wireframe(),
+                        
+                        // Phase 1: Raycasting
+                        raycast: dioxus_three::RaycastConfig::default(),
+                        
+                        // Phase 1: Pointer events
+                        on_pointer_down: move |event: dioxus_three::PointerEvent| {
+                            if let Some(hit) = event.hit {
+                                if event.shift_key {
+                                    selection.write().toggle(hit.entity_id);
+                                } else {
+                                    selection.write().select(hit.entity_id);
+                                }
+                            } else if !event.shift_key {
+                                selection.write().clear();
+                            }
+                        },
+                        
+                        // Phase 1: Selection
+                        selection: Some(selection()),
+                        selection_mode: dioxus_three::SelectionMode::Multiple,
+                        selection_style: dioxus_three::SelectionStyle::default(),
+                        
+                        // Phase 1: Gizmo
+                        gizmo: if show_gizmo() {
+                            selection().primary().map(|id| {
+                                Gizmo::new(id)
+                                    .with_mode(gizmo_mode())
+                                    .with_space(gizmo_space())
+                            })
+                        } else {
+                            None
+                        },
+                        
+                        on_gizmo_drag: move |event: dioxus_three::GizmoEvent| {
+                            web_sys::console::log_1(&format!("[WEB-DEMO] gizmo_drag - entity: {}, mode: {:?}, finished: {}, scale: {:?}",
+                                event.target.0, event.mode, event.is_finished, event.transform.scale).into());
+                            transform_overrides.write().insert(event.target.0, event.transform);
+                        },
                     }
                 }
             }
         }
     }
-}
-
-#[derive(Clone, PartialEq, Debug)]
-struct SceneModel {
-    id: usize,
-    name: String,
-    config: ModelConfig,
 }
 
 #[component]
@@ -318,179 +583,16 @@ fn Toggle(label: String, value: Signal<bool>) -> Element {
 }
 
 #[component]
-fn PresetButton(
-    name: String,
-    format: ModelFormat,
-    url: String,
-    models: Signal<Vec<SceneModel>>,
-    next_id: Signal<usize>,
-    selected_model: Signal<usize>,
-) -> Element {
+fn GizmoModeButton(label: String, active: bool, onclick: EventHandler<()>) -> Element {
     rsx! {
         button {
-            class: "bg-gray-600 hover:bg-gray-500 px-2 py-2 rounded text-xs text-left transition",
-            onclick: move |_| {
-                let id = next_id();
-                let config = ModelConfig::new(url.clone(), format.clone())
-                    .with_color("#ff6b6b");
-
-                models.write().push(SceneModel {
-                    id,
-                    name: name.clone(),
-                    config,
-                });
-                next_id += 1;
-                selected_model.set(models().len() - 1);
+            class: if active { 
+                "bg-yellow-600 hover:bg-yellow-700 px-3 py-2 rounded text-sm font-medium transition" 
+            } else { 
+                "bg-gray-600 hover:bg-gray-500 px-3 py-2 rounded text-sm transition" 
             },
-            "{name}"
-        }
-    }
-}
-
-#[component]
-fn SelectedModelControls(models: Signal<Vec<SceneModel>>, selected_idx: usize) -> Element {
-    let model = models.read().get(selected_idx).cloned();
-
-    let model_name = model.as_ref().map(|m| m.name.clone()).unwrap_or_default();
-    let pos_x = model.as_ref().map(|m| m.config.pos_x).unwrap_or(0.0);
-    let pos_y = model.as_ref().map(|m| m.config.pos_y).unwrap_or(0.0);
-    let pos_z = model.as_ref().map(|m| m.config.pos_z).unwrap_or(0.0);
-    let rot_x = model.as_ref().map(|m| m.config.rot_x).unwrap_or(0.0);
-    let rot_y = model.as_ref().map(|m| m.config.rot_y).unwrap_or(0.0);
-    let rot_z = model.as_ref().map(|m| m.config.rot_z).unwrap_or(0.0);
-    let scale = model.as_ref().map(|m| m.config.scale).unwrap_or(1.0);
-    let color = model
-        .as_ref()
-        .map(|m| m.config.color.clone())
-        .unwrap_or_else(|| "#ff6b6b".to_string());
-
-    let title = format!("🔧 {}", model_name);
-
-    rsx! {
-        ControlGroup { title: title,
-            // Position
-            div { class: "mb-2",
-                label { class: "block text-xs text-gray-400 mb-1", "Position" }
-                div { class: "grid grid-cols-3 gap-2",
-                    NumberInput {
-                        value: pos_x,
-                        onchange: move |v| {
-                            let mut m = models.write();
-                            if let Some(model) = m.get_mut(selected_idx) {
-                                model.config.pos_x = v;
-                            }
-                        }
-                    }
-                    NumberInput {
-                        value: pos_y,
-                        onchange: move |v| {
-                            let mut m = models.write();
-                            if let Some(model) = m.get_mut(selected_idx) {
-                                model.config.pos_y = v;
-                            }
-                        }
-                    }
-                    NumberInput {
-                        value: pos_z,
-                        onchange: move |v| {
-                            let mut m = models.write();
-                            if let Some(model) = m.get_mut(selected_idx) {
-                                model.config.pos_z = v;
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Rotation
-            div { class: "mb-2",
-                label { class: "block text-xs text-gray-400 mb-1", "Rotation (°)" }
-                div { class: "grid grid-cols-3 gap-2",
-                    NumberInput {
-                        value: rot_x,
-                        onchange: move |v| {
-                            let mut m = models.write();
-                            if let Some(model) = m.get_mut(selected_idx) {
-                                model.config.rot_x = v;
-                            }
-                        }
-                    }
-                    NumberInput {
-                        value: rot_y,
-                        onchange: move |v| {
-                            let mut m = models.write();
-                            if let Some(model) = m.get_mut(selected_idx) {
-                                model.config.rot_y = v;
-                            }
-                        }
-                    }
-                    NumberInput {
-                        value: rot_z,
-                        onchange: move |v| {
-                            let mut m = models.write();
-                            if let Some(model) = m.get_mut(selected_idx) {
-                                model.config.rot_z = v;
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Scale
-            div { class: "mb-2",
-                label { class: "block text-xs text-gray-400 mb-1", "Scale: {scale:.2}" }
-                input {
-                    r#type: "range",
-                    min: "0.1",
-                    max: "5.0",
-                    step: "0.1",
-                    value: "{scale}",
-                    oninput: move |e| {
-                        if let Ok(v) = e.value().parse::<f32>() {
-                            let mut m = models.write();
-                            if let Some(model) = m.get_mut(selected_idx) {
-                                model.config.scale = v;
-                            }
-                        }
-                    },
-                    class: "w-full h-1.5 bg-gray-600 rounded-lg appearance-none cursor-pointer"
-                }
-            }
-
-            // Color
-            div { class: "flex items-center gap-3",
-                label { class: "text-xs text-gray-400", "Color" }
-                input {
-                    r#type: "color",
-                    value: "{color}",
-                    oninput: move |e| {
-                        let c = e.value();
-                        let mut m = models.write();
-                        if let Some(model) = m.get_mut(selected_idx) {
-                            model.config.color = c;
-                        }
-                    },
-                    class: "w-12 h-8 rounded cursor-pointer"
-                }
-                span { class: "text-sm text-gray-400", "{color}" }
-            }
-        }
-    }
-}
-
-#[component]
-fn NumberInput(value: f32, onchange: EventHandler<f32>) -> Element {
-    rsx! {
-        input {
-            r#type: "number",
-            value: "{value:.1}",
-            step: "0.1",
-            onchange: move |e| {
-                if let Ok(v) = e.value().parse::<f32>() {
-                    onchange.call(v);
-                }
-            },
-            class: "w-full bg-gray-600 rounded px-2 py-1 text-sm"
+            onclick: move |_| onclick.call(()),
+            "{label}"
         }
     }
 }

@@ -1,5 +1,6 @@
 # Dioxus Three v0.0.3
 
+![Tests](https://github.com/eftech93/dioxus-three/actions/workflows/ci.yml/badge.svg)
 [![Docs](https://img.shields.io/badge/docs-online-brightgreen)](./docs)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)](LICENSE)
 
@@ -8,6 +9,12 @@ A Three.js 3D model viewer component for Dioxus applications with support for cu
 Works on **Desktop** (WebView), **Web** (WASM/canvas), and **Mobile** platforms.
 
 📚 **[Full Documentation](docs/README.md)** | 🎮 **[Demo](examples/demo)** | 🐙 **[GitHub](https://github.com/eftech93/dioxus-three)**
+
+## Visual Proof
+
+> 🎬 **Demo GIF:** A GLB model loading, rotating, and responding to camera controls.
+>
+> *Place a 10-second MP4/GIF in `docs/images/demo.mp4` and embed it here.*
 
 ## Features
 
