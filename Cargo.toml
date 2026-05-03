@@ -9,7 +9,7 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/eftech93/dioxus-three"
 homepage = "https://github.com/eftech93/dioxus-three"
 documentation = "https://docs.rs/dioxus-three"
-keywords = ["dioxus", "rust", "3d", "threejs", "gltf", "wasm", "webgl", "model-viewer"]
+keywords = ["dioxus", "3d", "threejs", "wasm", "model-viewer"]
 categories = ["gui", "graphics", "rendering", "wasm"]
 
 [dependencies]
