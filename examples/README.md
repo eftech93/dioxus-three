@@ -80,6 +80,8 @@ All examples support:
 - **Shader effects**: Gradient, Water, Hologram, Toon, Heatmap
 - **Camera controls**: Position and preset views
 - **Transform editing**: Position, rotation, scale
+- **Interactive gizmos**: Translate, Rotate, Scale handles (v0.0.3+)
+- **Object selection**: Click to select, multi-select with Ctrl/Cmd (v0.0.3+)
 - **Auto-rotation**: Configurable speed
 - **Model management**: Add, remove, select models
 

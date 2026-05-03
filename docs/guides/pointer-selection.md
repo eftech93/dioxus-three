@@ -1,232 +1,211 @@
 # Pointer Events & Selection
 
-Phase 1 features for interacting with 3D objects through mouse/touch input.
+Dioxus Three provides pointer event handling and object selection across all platforms.
 
 ## Overview
 
-Dioxus Three now supports:
-- **Raycasting**: Detect which 3D objects are under the cursor
-- **Selection**: Track selected objects with visual feedback
-- **Gizmos**: Visual handles for transforming selected objects
+The interaction system consists of:
+- **Raycasting**: Hit detection for pointer events
+- **Selection**: Click to select, multi-select with Ctrl/Cmd
+- **Pointer Events**: `on_pointer_down`, `on_pointer_move`, `on_pointer_up`
 
-## Basic Raycasting
+## Enabling Raycasting
 
-Detect clicks on 3D objects:
+Raycasting is enabled by default. To configure it:
 
 ```rust
-use dioxus::prelude::*;
-use dioxus_three::{ThreeView, PointerEvent};
+ThreeView {
+    raycast: RaycastConfig {
+        enabled: true,
+        recursive: true,
+        max_distance: 100.0,
+        layer_mask: 0xFFFFFFFF,
+    },
+}
+```
 
-fn app() -> Element {
-    let mut selected = use_signal(|| None::<EntityId>);
-    
-    rsx! {
-        div { style: "display: flex; height: 100vh;",
-            ThreeView {
-                models: models(),
-                
-                on_pointer_down: move |event: PointerEvent| {
-                    if let Some(hit) = event.hit {
-                        println!("Clicked on entity {:?}", hit.entity_id);
-                        println!("At world position: {:?}", hit.point);
-                        selected.set(Some(hit.entity_id));
-                    } else {
-                        // Clicked on empty space
-                        selected.set(None);
-                    }
-                },
-            }
-        }
+## Selection
+
+### Basic Selection
+
+```rust
+let mut selection = use_signal(|| Selection::empty());
+
+rsx! {
+    ThreeView {
+        models: models(),
+        selection: selection(),
+        selection_mode: SelectionMode::Single,
+        on_selection_change: move |sel| {
+            selection.set(sel);
+        },
     }
 }
 ```
 
-## Selection System
-
-Track multiple selected objects:
+### Multi-Selection
 
 ```rust
-use dioxus_three::{Selection, SelectionMode, SelectionStyle};
-
-fn app() -> Element {
-    let mut selection = use_signal(|| Selection::new());
-    
-    rsx! {
-        div { style: "display: flex; height: 100vh;",
-            div { style: "width: 300px; padding: 20px;",
-                h3 { "Selected: {selection().count()}" }
-                button { onclick: move |_| selection.write().clear(), "Clear" }
-                
-                for id in selection().iter() {
-                    div { "Entity: {id}" }
-                }
-            }
-            
-            ThreeView {
-                models: models(),
-                selection: Some(selection()),
-                selection_mode: SelectionMode::Multiple,
-                selection_style: SelectionStyle {
-                    outline: true,
-                    outline_color: "#DEC647".to_string(),
-                    outline_width: 2.0,
-                    highlight: true,
-                    highlight_color: "#DEC647".to_string(),
-                    highlight_opacity: 0.3,
-                    show_gizmo: true,
-                },
-                
-                on_selection_change: move |new_selection: Selection| {
-                    selection.set(new_selection);
-                },
-            }
-        }
-    }
+ThreeView {
+    selection_mode: SelectionMode::Multiple,
+    // Ctrl/Cmd+click to add/remove from selection
 }
 ```
 
-## Transform Gizmos
-
-Visual handles for moving/rotating/scaling:
+### Selection Styling
 
 ```rust
-use dioxus_three::{Gizmo, GizmoMode, GizmoSpace};
+ThreeView {
+    selection_style: SelectionStyle {
+        outline_color: "#00ff88".to_string(),
+        outline_width: 2.0,
+        glow_color: "#00ff8844".to_string(),
+        glow_size: 4.0,
+    },
+}
+```
 
-fn app() -> Element {
-    let mut selected = use_signal(|| None::<EntityId>);
-    let mut gizmo_mode = use_signal(|| GizmoMode::Translate);
-    
+The default selection visual is a wireframe box + inner glow around the selected object.
+
+### Selection API
+
+```rust
+let sel = Selection::empty();           // No selection
+let sel = Selection::single(EntityId(0)); // Single selection
+let primary = sel.primary();            // Option<EntityId>
+let contains = sel.contains(EntityId(0)); // bool
+```
+
+## Pointer Events
+
+### Basic Pointer Events
+
+```rust
+ThreeView {
+    id: "main-view",  // Required for event routing
+    on_pointer_down: move |event: PointerEvent| {
+        println!("Down at {:?}", event.screen_position);
+        if let Some(id) = event.entity_id {
+            println!("Hit entity: {:?}", id);
+        }
+    },
+    on_pointer_move: move |event: PointerEvent| {
+        // Called on hover/drag
+    },
+    on_pointer_up: move |event: PointerEvent| {
+        println!("Up at {:?}", event.screen_position);
+    },
+}
+```
+
+### Pointer Event Structure
+
+```rust
+pub struct PointerEvent {
+    pub entity_id: Option<EntityId>,     // Hitted entity (if any)
+    pub position: (f32, f32),            // NDC (-1 to 1)
+    pub screen_position: (f32, f32),     // Pixels
+    pub button: PointerButton,           // Left | Right | Middle
+    pub modifiers: Modifiers,            // Shift | Ctrl | Alt | Meta
+}
+```
+
+### Pointer Drag Events
+
+```rust
+ThreeView {
+    on_pointer_drag: move |event: PointerDragEvent| {
+        println!("Drag from {:?} to {:?}", event.start, event.current);
+    },
+}
+```
+
+## Complete Example: Selection + Transform Readout
+
+```rust
+#[component]
+fn InteractiveScene() -> Element {
+    let mut selection = use_signal(|| Selection::empty());
+    let mut gizmo = use_signal(|| None::<Gizmo>);
+    let mut transform_overrides = use_signal(|| HashMap::<usize, GizmoTransform>::new());
+
+    let models = use_signal(|| vec![
+        ModelWithTransform {
+            config: ModelConfig {
+                model_url: Some("model.glb".to_string()),
+                format: ModelFormat::Glb,
+                ..Default::default()
+            },
+        }
+    ]);
+
+    // Build model configs WITHOUT baking overrides to prevent reloads during drag
+    let model_configs: Vec<ModelConfig> = models.read()
+        .iter()
+        .map(|m| m.config.clone())
+        .collect();
+
     rsx! {
-        div { style: "display: flex; height: 100vh;",
-            // Mode selector
-            div { style: "position: absolute; top: 20px; left: 50%; z-index: 10;",
-                button { onclick: move |_| gizmo_mode.set(GizmoMode::Translate), "Move" }
-                button { onclick: move |_| gizmo_mode.set(GizmoMode::Rotate), "Rotate" }
-                button { onclick: move |_| gizmo_mode.set(GizmoMode::Scale), "Scale" }
-            }
-            
+        div {
             ThreeView {
-                models: models(),
-                
-                gizmo: selected().map(|id| Gizmo {
-                    target: id,
-                    mode: gizmo_mode(),
-                    space: GizmoSpace::World,
-                    size: 1.0,
-                    show_x: true,
-                    show_y: true,
-                    show_z: true,
-                    show_xyz: true,
-                    show_planes: true,
-                }),
-                
+                models: model_configs,
+                selection: selection(),
+                selection_mode: SelectionMode::Single,
+                on_selection_change: move |sel| {
+                    selection.set(sel.clone());
+                    gizmo.set(sel.primary().map(|id| Gizmo::new(id)));
+                },
+                gizmo: gizmo(),
                 on_gizmo_drag: move |event: GizmoEvent| {
-                    println!("Transforming {:?}", event.target);
-                    println!("New position: {:?}", event.transform.position);
-                    
+                    transform_overrides.write().insert(event.target.0, event.transform);
                     if event.is_finished {
-                        println!("Drag completed");
+                        // Persist: write back to your app state
+                        println!("Final transform: {:?}", event.transform);
                     }
                 },
-                
-                on_pointer_down: move |e| selected.set(e.hit.map(|h| h.entity_id)),
             }
-        }
-    }
-}
-```
 
-## Complete Example
+            // Transform readout UI
+            if let Some(primary) = selection().primary() {
+                let tf = transform_overrides.read()
+                    .get(&primary.0)
+                    .cloned()
+                    .unwrap_or_else(|| GizmoTransform::from_model(&models.read()[primary.0].config));
 
-Interactive scene with full control:
-
-```rust
-fn app() -> Element {
-    let mut selection = use_signal(|| Selection::new());
-    let mut mode = use_signal(|| GizmoMode::Translate);
-    
-    rsx! {
-        div { style: "display: flex; height: 100vh;",
-            // Sidebar
-            div { style: "width: 300px; padding: 20px; background: #1a1a2e; color: white;",
-                h2 { "Scene Editor" }
-                
-                h3 { "Gizmo Mode" }
-                button { onclick: move |_| mode.set(GizmoMode::Translate), "Translate (T)" }
-                button { onclick: move |_| mode.set(GizmoMode::Rotate), "Rotate (R)" }
-                button { onclick: move |_| mode.set(GizmoMode::Scale), "Scale (S)" }
-                
-                h3 { "Selected ({selection().count()})" }
-                button { onclick: move |_| selection.write().clear(), "Clear Selection" }
-                
-                for id in selection().iter() {
-                    div { "Entity: {id:?}" }
+                div { class: "transform-panel",
+                    p { "Position: ({:.2}, {:.2}, {:.2})", tf.position.x, tf.position.y, tf.position.z }
+                    p { "Rotation: ({:.2}, {:.2}, {:.2})", tf.rotation.x, tf.rotation.y, tf.rotation.z }
+                    p { "Scale: ({:.2}, {:.2}, {:.2})", tf.scale.x, tf.scale.y, tf.scale.z }
                 }
             }
-            
-            // 3D View
-            ThreeView {
-                models: vec![
-                    ModelConfig::new("cube1.glb", ModelFormat::Gltf)
-                        .with_position(-2.0, 0.0, 0.0),
-                    ModelConfig::new("cube2.glb", ModelFormat::Gltf)
-                        .with_position(2.0, 0.0, 0.0),
-                ],
-                
-                selection: Some(selection()),
-                selection_mode: SelectionMode::Multiple,
-                
-                gizmo: selection().primary().map(|id| Gizmo::new(id)
-                    .with_mode(mode())
-                    .with_space(GizmoSpace::World)
-                ),
-                
-                on_selection_change: move |s| selection.set(s),
-            }
         }
     }
 }
 ```
 
-## API Reference
+### Important: Transform Persistence Pattern
 
-### PointerEvent
+When using gizmos, the gizmo directly manipulates JS-side Three.js objects. To keep the UI responsive and avoid full scene reloads:
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `hit` | `Option<HitInfo>` | Raycast hit information |
-| `screen_position` | `Vector2` | Cursor position in pixels |
-| `ndc_position` | `Vector2` | Normalized device coords (-1 to 1) |
-| `button` | `Option<MouseButton>` | Which button triggered |
-| `shift_key` | `bool` | Shift pressed |
-| `ctrl_key` | `bool` | Ctrl/Cmd pressed |
-| `alt_key` | `bool` | Alt pressed |
+1. **Pass raw configs** to `ThreeView` (without baking `transform_overrides` into `models`)
+2. **Store overrides separately** in a `HashMap<EntityId, GizmoTransform>`
+3. **Read from overrides** for UI display
+4. **Persist on `is_finished`** by writing back to your canonical app state
 
-### HitInfo
+Baking overrides into `props.models` causes the model config to change every frame during drag, triggering a full scene reload and choppy performance.
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `entity_id` | `EntityId` | The hit entity |
-| `point` | `Vector3` | World position of hit |
-| `normal` | `Vector3` | Surface normal |
-| `uv` | `Option<Vector2>` | UV coordinates |
-| `distance` | `f32` | Distance from camera |
-| `face_index` | `Option<usize>` | Triangle index |
-| `instance_id` | `Option<usize>` | For instanced meshes |
+## Platform Behavior
 
-### SelectionMode
+### Desktop
+- Selection via raycast against scene objects
+- Gizmo interaction via `THREE.TransformControls`
+- Events bridged via `document::eval` + `postMessage`
 
-- `Single` - One selection at a time
-- `Multiple` - Ctrl+click to multi-select
-- `Toggle` - Click toggles selection
+### Web
+- Selection via manual raycasting in WASM
+- Gizmo interaction via custom-built handles
+- Events bridged via `wasm_bindgen` closures
 
-### GizmoMode
-
-- `Translate` - Move objects
-- `Rotate` - Rotate objects
-- `Scale` - Scale objects
-
-### GizmoSpace
-
-- `World` - Transform in world coordinates
-- `Local` - Transform in object coordinates
+### Mobile
+- Same as Desktop (WebView-based)
+- Touch events not yet fully tested

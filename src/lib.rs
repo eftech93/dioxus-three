@@ -905,27 +905,8 @@ pub fn generate_three_js_html(props: &ThreeViewProps) -> String {
             const glow = new THREE.Mesh(glowGeometry, glowMaterial);
             outlineGroup.add(glow);
             
-            // Corner markers for better visibility
-            const cornerSize = maxDim * 0.08;
-            const cornerGeometry = new THREE.BoxGeometry(cornerSize, cornerSize, cornerSize);
-            const cornerMaterial = new THREE.MeshBasicMaterial({{ color: outlineColor }});
-            
-            const corners = [
-                {{ x: 1, y: 1, z: 1 }}, {{ x: -1, y: 1, z: 1 }},
-                {{ x: 1, y: -1, z: 1 }}, {{ x: -1, y: -1, z: 1 }},
-                {{ x: 1, y: 1, z: -1 }}, {{ x: -1, y: 1, z: -1 }},
-                {{ x: 1, y: -1, z: -1 }}, {{ x: -1, y: -1, z: -1 }}
-            ];
-            
-            corners.forEach(corner => {{
-                const cornerMesh = new THREE.Mesh(cornerGeometry, cornerMaterial);
-                cornerMesh.position.set(
-                    corner.x * size.x * 0.54,
-                    corner.y * size.y * 0.54,
-                    corner.z * size.z * 0.54
-                );
-                outlineGroup.add(cornerMesh);
-            }});
+            // Store original size for scale tracking
+            outlineGroup.userData = {{ originalSize: size.clone() }};
             
             // Position the outline group
             outlineGroup.position.copy(center);
@@ -1092,7 +1073,10 @@ pub fn generate_three_js_html(props: &ThreeViewProps) -> String {
                 if (obj) selectableObjects.push(obj);
             }}
             
+            console.log('[RAYCAST] checking', selectableObjects.length, 'objects, mouse:', mouse.x.toFixed(3), mouse.y.toFixed(3));
+            
             const intersects = raycaster.intersectObjects(selectableObjects, true);
+            console.log('[RAYCAST] intersects:', intersects.length);
             if (intersects.length > 0) {{
                 // Find the entity ID for this intersection
                 let targetObj = intersects[0].object;
@@ -1158,16 +1142,26 @@ pub fn generate_three_js_html(props: &ThreeViewProps) -> String {
         
         // Pointer event handlers
         function onPointerDown(event) {{
-            if (!raycastEnabled) return;
+            if (!raycastEnabled) {{
+                console.log('[POINTER] raycast disabled');
+                return;
+            }}
             
             // Don't process if clicking on gizmo
-            if (transformControl && transformControl.dragging) return;
+            if (transformControl && transformControl.dragging) {{
+                console.log('[POINTER] gizmo is dragging, skipping');
+                return;
+            }}
             
             // Check if clicking on gizmo handle - let TransformControls handle it
-            if (isClickOnGizmo(event)) return;
+            if (isClickOnGizmo(event)) {{
+                console.log('[POINTER] click on gizmo, skipping');
+                return;
+            }}
             
             isDragging = false;
             const hit = raycastEntity(event.clientX, event.clientY);
+            console.log('[POINTER] down at', event.clientX, event.clientY, 'hit:', hit);
             
             // Handle selection within the iframe
             if (selectionEnabled && hit) {{
@@ -1433,8 +1427,20 @@ pub fn generate_three_js_html(props: &ThreeViewProps) -> String {
                 if (sourceMesh.parent) {{
                     const box = new THREE.Box3().setFromObject(sourceMesh);
                     const center = box.getCenter(new THREE.Vector3());
+                    const currentSize = box.getSize(new THREE.Vector3());
+                    const originalSize = outlineGroup.userData.originalSize;
+                    
                     outlineGroup.position.copy(center);
                     outlineGroup.rotation.copy(sourceMesh.rotation);
+                    
+                    // Scale outline to match object's current bounding box
+                    if (originalSize && originalSize.x > 0 && originalSize.y > 0 && originalSize.z > 0) {{
+                        outlineGroup.scale.set(
+                            currentSize.x / originalSize.x,
+                            currentSize.y / originalSize.y,
+                            currentSize.z / originalSize.z
+                        );
+                    }}
                 }}
             }}
             

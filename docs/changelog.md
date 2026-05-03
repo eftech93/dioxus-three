@@ -5,20 +5,75 @@ All notable changes to Dioxus Three will be documented in this file.
 **Maintainer:** Esteban Puello - [eftech93@gmail.com](mailto:eftech93@gmail.com)  
 **Repository:** [github.com/eftech93/dioxus-three](https://github.com/eftech93/dioxus-three)
 
-## [0.0.3] - 2024-04-07
+## [0.0.3]
+
+### Added
+
+- **Phase 1: Input & Selection System** — Full raycasting, selection, and gizmo support
+  - `RaycastConfig` with `enabled`, `recursive`, `max_distance`, `layer_mask`
+  - Pointer events: `on_pointer_down`, `on_pointer_move`, `on_pointer_up`, `on_pointer_drag`
+  - Gesture events: `on_gesture` (pinch, rotate, pan)
+  - `Selection` state with `SelectionMode::Single` and `SelectionMode::Multiple`
+  - `SelectionStyle` for customizable outline (color, width, glow)
+  - `Gizmo` struct with `Translate`, `Rotate`, `Scale` modes and `World`/`Local` space
+  - `on_gizmo_drag` callback with live `GizmoTransform` during drag and `is_finished` flag
+  - Selection outline: wireframe box + inner glow (no corner cubes)
+  - `EntityId` type for identifying scene objects
+
+- **Desktop Gizmo Support** — Official `THREE.TransformControls` in iframe
+  - Translate, Rotate, Scale handles with axis/plane constraints
+  - Gizmo events bridged via `document::eval` + `postMessage`
+  - `isClickOnGizmo` correctly filters for mesh objects only (`isMesh` check)
+
+- **Web Gizmo Support** — Custom-built gizmos with manual raycasting
+  - Translate handles: arrow cones with camera-facing plane intersection drag math
+  - Rotate handles: tori (rings) with arcball rotation
+  - Scale handles: boxes with distance-based scaling
+  - Center uniform-scale handle (white box)
+  - Live `entityMap` reads from `canvas.dioxusThreeState` to avoid stale references
+
+- **Desktop iframe state update optimization**
+  - HTML generated once via `use_signal`; only regenerated when model count changes
+  - All other prop updates sent via `postMessage("update-state")` without iframe reload
+  - Camera, selection, gizmo, and selection-style updates handled in-message
+
+- **Transform readout UI** — Both desktop and web demos show live position/rotation/scale
 
 ### Fixed
 
 - **Web Platform Camera Controls** - Fixed camera position not updating in web demo
   - Camera object now properly stored in `dioxusThreeState`
   - Immediate camera position updates when state changes
-  - Fixed camera reference access in JavaScript animation loop
+
+- **Desktop gizmo click detection** — `isClickOnGizmo` now checks `intersects[i].object.isMesh`
+  - Previously counted gizmo lines as hits, causing selection handler to bail out
+
+- **Web `entityMap` stale reference** — `updateGizmo` reads from live `canvas.dioxusThreeState.entityMap`
+  - Previously used captured closure variable pointing to removed meshes
+
+- **Translate drag math** — Replaced `closestPointOnLineToRay` with camera-facing plane intersection
+  - Old approach found closest approach between infinite lines, often giving wrong results
+  - New approach: create plane containing drag axis, intersect mouse ray, project delta onto axis
+
+- **Scale sensitivity** — Increased multiplier from `*2` to `*4`
+
+- **Choppy drag performance** — `transform_overrides` no longer baked into `model_configs`
+  - Baking overrides changed `props.models` every frame, triggering full model reload
+  - Fixed by passing raw `m.config.clone()`; gizmo manipulates JS objects directly
+  - Added defensive model comparison in web implementation
+
+- **Selection outline cleanup** — Removed 8 corner-marker cubes from outline
+  - Now just wireframe box + inner glow for cleaner look
 
 ### Technical
 
-- Updated `dioxusThreeState` to include camera reference
-- Added immediate camera position synchronization in state update handler
-- Enhanced debug logging for camera position tracking
+- `use_reactive` hook for prop change detection
+- `use_effect` with signal subscriptions for real-time updates
+- `wasm_bindgen_futures` for async loader loading
+- JavaScript state object stored on canvas element (`dioxusThreeState`)
+- Desktop: `document::eval` bridge for iframe→Rust events
+- Web: `wasm_bindgen` closures (`dioxusThreeRustBridge`) for canvas→Rust events
+- `updateModels()` in desktop iframe: updates transforms/creates cubes/removes objects without full reload
 
 ## [0.0.2] - 2024-04-07
 
@@ -94,40 +149,6 @@ All notable changes to Dioxus Three will be documented in this file.
 - [ ] Texture loading from URLs
 - [ ] Animation playback for glTF/FBX
 - [ ] Post-processing effects (bloom, DOF, SSAO)
-- [ ] Raycasting for click/hover events
 - [ ] Offline mode (bundle Three.js)
 - [ ] Multiple viewports
 - [ ] Screenshot/export functionality
-
-### Potential Improvements
-
-- [ ] Message passing instead of HTML regeneration
-- [ ] Model caching
-- [ ] Virtual scrolling for multiple views
-- [ ] Shader hot-reload in development
-- [ ] VR/AR support via WebXR
-
----
-
-## Version History
-
-| Version | Date | Description |
-|---------|------|-------------|
-| 0.0.3 | 2024-04-07 | Fixed web platform camera controls |
-| 0.0.2 | 2024-04-07 | Web platform support, multi-model support |
-| 0.0.1 | 2024-04-05 | Initial release |
-
----
-
-## Contributing to Changelog
-
-When submitting PRs, please add an entry under the appropriate section:
-
-- **Added** - New features
-- **Changed** - Changes to existing functionality
-- **Deprecated** - Soon-to-be removed features
-- **Removed** - Removed features
-- **Fixed** - Bug fixes
-- **Security** - Security improvements
-
-Format: `- Description ([#PR](link))`

@@ -50,6 +50,10 @@ pub struct Selection {
 
 impl Selection {
     pub fn new() -> Self {
+        Self::empty()
+    }
+    
+    pub fn empty() -> Self {
         Self {
             selected: HashSet::new(),
             mode: SelectionMode::Single,

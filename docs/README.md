@@ -1,423 +1,98 @@
-# Dioxus Three Documentation v0.0.3
+# Dioxus Three Documentation
 
-A **Three.js 3D model viewer component** for Dioxus applications with support for custom GLSL shaders.
+Welcome to the Dioxus Three documentation.
 
-## Platform Support
+## What is Dioxus Three?
 
-| Platform | Backend | Status |
-|----------|---------|--------|
-| Desktop (Windows/macOS/Linux) | WebView iframe | ✅ Supported |
-| Web (WASM) | HTML5 Canvas | ✅ Supported |
-| Mobile (iOS/Android) | WebView | ✅ Supported |
-
-```mermaid
-graph LR
-    A[Dioxus App] --> B[ThreeView Component]
-    B --> C{Platform}
-    C -->|Desktop/Mobile| D[WebView iframe]
-    C -->|Web| E[HTML5 Canvas]
-    D --> F[Three.js Scene]
-    E --> F
-    F --> G[3D Models]
-    F --> H[Custom Shaders]
-```
-
-## Features
-
-- 🖥️ **Multi-Platform** - Desktop, Web (WASM), and Mobile support
-- 🎮 **Interactive 3D** - Render and control 3D models with ease
-- 📁 **Multiple Formats** - Supports OBJ, FBX, GLTF, GLB, STL, PLY, DAE
-- 📦 **Multi-Model** - Load and display multiple models simultaneously
-- 🎨 **Custom Shaders** - Built-in shader presets + custom GLSL support
-- 🌊 **Shader Effects** - Gradient, Water, Hologram, Toon, Heatmap
-- 📷 **Camera Control** - Adjustable camera position and target
-- 🔄 **Auto-rotation** - Built-in auto-rotation with speed control
-- 📐 **Auto-center & Auto-scale** - Automatically fit models to viewport
-- 🔲 **Wireframe Mode** - Toggle wireframe visualization
-
-## Supported Formats
-
-| Format | Extension | Description |
-|--------|-----------|-------------|
-| OBJ | `.obj` | Wavefront OBJ (most common) |
-| FBX | `.fbx` | Autodesk FBX |
-| glTF | `.gltf` | GL Transmission Format (JSON) |
-| GLB | `.glb` | GL Transmission Format (Binary) |
-| STL | `.stl` | StereoLithography (3D printing) |
-| PLY | `.ply` | Stanford Polygon Library |
-| DAE | `.dae` | Collada format |
-| - | - | Default Cube (built-in) |
-
-## Quick Example
-
-```rust
-use dioxus::prelude::*;
-use dioxus_three::{ThreeView, ModelConfig, ModelFormat};
-
-fn app() -> Element {
-    let models = vec![
-        ModelConfig::new("", ModelFormat::Cube)
-            .with_color("#ff6b6b"),
-        ModelConfig::new("https://example.com/helmet.gltf", ModelFormat::Gltf)
-            .with_position(2.0, 0.0, 0.0),
-    ];
-    
-    rsx! {
-        ThreeView {
-            models: models,
-            auto_rotate: true,
-            show_grid: true,
-        }
-    }
-}
-```
+A Dioxus component that wraps Three.js, providing a cross-platform 3D viewer for Rust applications. Works on Desktop (WebView), Web (WASM), and Mobile (WebView).
 
 ## Installation
 
-Add to your `Cargo.toml`:
-
 ```toml
 [dependencies]
-dioxus-three = "0.0.2"
-dioxus = { version = "0.5", features = ["desktop"] }
+dioxus-three = "0.0.3"
+dioxus = "0.6"
 ```
 
-## Usage
+## Feature Overview
 
-### Basic Cube
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Model loading (GLB/GLTF/OBJ/FBX/STL/PLY/Collada/3MF) | ✅ Ready | Multiple formats supported |
+| Multiple models per scene | ✅ Ready | Compose scenes from multiple models |
+| Camera control (orbit, position, target) | ✅ Ready | Full orbit controls |
+| Custom shaders | ✅ Ready | Vertex + fragment shader support |
+| Desktop (macOS, Linux, Windows) | ✅ Ready | WebView iframe with Three.js |
+| Web (WASM) | ✅ Ready | Native canvas rendering |
+| Mobile (iOS, Android) | 🔄 Partial | WebView-based |
+| **Object selection** | ✅ **v0.0.3** | Click to select, multi-select with Ctrl/Cmd |
+| **Transform gizmos** | ✅ **v0.0.3** | Translate, Rotate, Scale handles |
+| **Pointer events** | ✅ **v0.0.3** | on_pointer_down/move/up callbacks |
+| **Raycasting** | ✅ **v0.0.3** | Hit detection for clicks and hovers |
+| Animation | 🔄 Planned | Keyframe and procedural |
+| Physics | 🔄 Planned | Rapier.js integration |
+| Post-processing | 🔄 Planned | Bloom, SSAO, etc. |
 
-The simplest usage - just a rotating cube:
+## Guides
 
-```rust
-use dioxus::prelude::*;
-use dioxus_three::ThreeView;
+### Getting Started
+- [Rendering Your First Model](guides/first-model.md) - Load a single 3D model
+- [Working with Multiple Models](guides/multi-model.md) - Scene composition
+- [Camera & Scene Setup](guides/camera-scene.md) - Camera, lighting, background
 
-fn app() -> Element {
-    rsx! {
-        ThreeView {
-            auto_rotate: true,
-            scale: 1.5,
-            color: "#00ff00".to_string(),
-        }
-    }
-}
-```
+### Input & Interaction
+- [Pointer Events & Selection](guides/pointer-selection.md) - Click, select, gizmos
+- [Transform Gizmos](guides/transform.md) - Translate, rotate, scale objects
 
-### Load a 3D Model
+### Advanced
+- [Custom Shaders](guides/shaders.md) - Writing vertex/fragment shaders
+- [Platform Differences](guides/platforms.md) - Desktop vs Web vs Mobile
+- [Architecture](guides/architecture.md) - How Dioxus Three works internally
 
-```rust
-use dioxus::prelude::*;
-use dioxus_three::{ThreeView, ModelFormat};
+## API Reference
 
-fn app() -> Element {
-    rsx! {
-        ThreeView {
-            model_url: Some("https://example.com/model.obj".to_string()),
-            format: ModelFormat::Obj,
-            auto_center: true,
-            auto_scale: true,
-            show_grid: true,
-        }
-    }
-}
-```
+- [ThreeView Component](api/threeview.md) - All props and configuration options
+- [ModelConfig](api/model-config.md) - Model loading configuration
+- [Selection & Gizmos](api/selection-gizmos.md) - Selection state and gizmo types
 
-### Multiple Models
-
-```rust
-use dioxus::prelude::*;
-use dioxus_three::{ThreeView, ModelConfig, ModelFormat};
-
-fn app() -> Element {
-    let models = vec![
-        ModelConfig::new("", ModelFormat::Cube)
-            .with_position(0.0, 0.0, 0.0)
-            .with_color("#ff6b6b"),
-        ModelConfig::new("https://example.com/helmet.gltf", ModelFormat::Gltf)
-            .with_position(2.0, 0.0, 0.0)
-            .with_scale(0.5),
-    ];
-    
-    rsx! {
-        ThreeView {
-            models: models,
-            auto_rotate: true,
-        }
-    }
-}
-```
-
-### Using Shader Effects
-
-```rust
-use dioxus::prelude::*;
-use dioxus_three::{ThreeView, ShaderPreset};
-
-fn app() -> Element {
-    rsx! {
-        // Animated gradient
-        ThreeView {
-            shader: ShaderPreset::Gradient,
-            auto_rotate: false, // Shader has its own animation
-        }
-    }
-}
-```
-
-### Custom Shaders
-
-```rust
-use dioxus::prelude::*;
-use dioxus_three::{ThreeView, ShaderConfig};
-use std::collections::HashMap;
-
-fn app() -> Element {
-    let mut uniforms = HashMap::new();
-    uniforms.insert("u_intensity".to_string(), 0.5);
-    
-    let shader_config = ShaderConfig {
-        vertex_shader: Some(r#"
-            varying vec2 vUv;
-            void main() {
-                vUv = uv;
-                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-            }
-        "#.to_string()),
-        fragment_shader: Some(r#"
-            uniform vec3 u_color;
-            uniform float u_intensity;
-            varying vec2 vUv;
-            
-            void main() {
-                vec3 color = u_color * (0.5 + sin(vUv.x * 10.0) * u_intensity);
-                gl_FragColor = vec4(color, 1.0);
-            }
-        "#.to_string()),
-        uniforms,
-        animated: false,
-    };
-    
-    rsx! {
-        ThreeView {
-            shader: ShaderPreset::Custom(shader_config),
-            color: "#ff0000".to_string(),
-        }
-    }
-}
-```
-
-## Shader Presets
-
-| Preset | Description | Animated |
-|--------|-------------|----------|
-| `None` | Standard PBR material | No |
-| `Gradient` | Animated RGB gradient | Yes |
-| `Water` | Animated water waves | Yes |
-| `Hologram` | Sci-fi hologram with scanlines | Yes |
-| `Toon` | Cel/toon shading | No |
-| `Heatmap` | Temperature visualization | No |
-| `Custom` | Your own GLSL shaders | Configurable |
-
-## Component Props
-
-### Model Loading
-
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `model_url` | `Option<String>` | `None` | URL or path to 3D model file |
-| `format` | `ModelFormat` | `ModelFormat::Cube` | Model file format |
-| `models` | `Vec<ModelConfig>` | `[]` | Multiple models to display |
-| `auto_center` | `bool` | `true` | Auto-center model on load |
-| `auto_scale` | `bool` | `false` | Auto-scale to fit viewport |
-
-### Transform
-
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `pos_x` | `f32` | `0.0` | X position |
-| `pos_y` | `f32` | `0.0` | Y position |
-| `pos_z` | `f32` | `0.0` | Z position |
-| `rot_x` | `f32` | `0.0` | X rotation (degrees) |
-| `rot_y` | `f32` | `0.0` | Y rotation (degrees) |
-| `rot_z` | `f32` | `0.0` | Z rotation (degrees) |
-| `scale` | `f32` | `1.0` | Uniform scale |
-
-### Appearance
-
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `color` | `String` | `"#ff6b6b"` | Material color (hex) |
-| `wireframe` | `bool` | `false` | Wireframe mode |
-| `shader` | `ShaderPreset` | `ShaderPreset::None` | Shader effect |
-| `background` | `String` | `"#1a1a2e"` | Background color |
-| `show_grid` | `bool` | `true` | Show grid helper |
-| `show_axes` | `bool` | `true` | Show axes helper |
-| `shadows` | `bool` | `true` | Enable shadows |
-
-### Camera
-
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `cam_x` | `f32` | `5.0` | Camera X position |
-| `cam_y` | `f32` | `5.0` | Camera Y position |
-| `cam_z` | `f32` | `5.0` | Camera Z position |
-| `target_x` | `f32` | `0.0` | Camera target X |
-| `target_y` | `f32` | `0.0` | Camera target Y |
-| `target_z` | `f32` | `0.0` | Camera target Z |
-
-### Animation
-
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `auto_rotate` | `bool` | `true` | Auto-rotate model |
-| `rot_speed` | `f32` | `1.0` | Rotation speed multiplier |
-
-### Styling
-
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `class` | `String` | `""` | Additional CSS classes |
-
-## Dynamic Scene Properties
-
-Control scene properties in real-time using Dioxus signals:
-
-```rust
-fn app() -> Element {
-    let mut cam_x = use_signal(|| 8.0f32);
-    let mut show_grid = use_signal(|| true);
-    
-    rsx! {
-        div { style: "display: flex; height: 100vh;",
-            div { style: "width: 250px; padding: 20px;",
-                input {
-                    r#type: "range",
-                    min: "-30",
-                    max: "30",
-                    value: "{cam_x()}",
-                    oninput: move |e| cam_x.set(e.value().parse().unwrap_or(8.0))
-                }
-                label {
-                    input {
-                        r#type: "checkbox",
-                        checked: "{show_grid()}",
-                        onchange: move |e| show_grid.set(e.checked())
-                    }
-                    "Show Grid"
-                }
-            }
-            
-            ThreeView {
-                cam_x: cam_x(),
-                show_grid: show_grid(),
-            }
-        }
-    }
-}
-```
-
-See [Managing Scene Properties](guides/scene-properties.md) for comprehensive examples including camera controls, transforms, animations, and shader switching.
-
-## Demo
-
-Run the demo application:
-
-```bash
-cd examples/demo
-cargo run
-```
-
-The demo includes:
-- Format selector (OBJ, FBX, GLTF, etc.)
-- Model URL input
-- Preset models
-- **Shader effects selector**
-- **Multi-model support**
-- **Dynamic scene property controls**
-- Transform controls
-- Appearance controls
-- Camera controls
-
-## Platform-Specific Notes
+## Platform Notes
 
 ### Desktop
-Uses WebView with an iframe to render Three.js. The entire HTML is regenerated on prop changes.
 
-### Web (WASM)
-Uses HTML5 Canvas with direct Three.js integration. Features:
-- Real-time state synchronization via JavaScript
-- Dynamic loader injection
-- Efficient updates without full re-renders
+- Uses WebView iframe with Three.js from CDN
+- Gizmos via official `THREE.TransformControls`
+- Events bridged via `document::eval` + `postMessage`
+- State updates sent without iframe reload
+
+### Web
+
+- Renders to native `<canvas>` via WASM
+- Custom-built gizmos with manual raycasting
+- Bridge via `wasm_bindgen` closures
+- Same selection/gizmo features as Desktop
 
 ### Mobile
-Uses WebView (same as desktop) with touch-friendly controls.
 
-## What are Shaders?
+- WebView approach similar to Desktop
+- Gizmos available but not yet fully tested
 
-**Shaders** are small programs that run on the GPU to control how 3D objects are rendered:
+## Migration
 
-- **Vertex Shaders** - Transform geometry vertices (position, deformation)
-- **Fragment Shaders** - Determine pixel colors (lighting, textures, effects)
+### From v0.0.2 to v0.0.3
 
-### Example Shader Effects
+v0.0.3 adds Phase 1 interaction features:
 
-**Animated Gradient:**
-```glsl
-// Fragment shader
-uniform float u_time;
-varying vec3 vPosition;
+- **New**: `selection`, `selection_mode`, `selection_style`, `on_selection_change`
+- **New**: `gizmo`, `on_gizmo_drag`
+- **New**: `raycast`, `on_pointer_down`, `on_pointer_move`, `on_pointer_up`, `on_pointer_drag`, `on_gesture`
+- **New**: `id` prop for event routing (recommended when using pointer events)
 
-void main() {
-    float r = sin(vPosition.x + u_time) * 0.5 + 0.5;
-    float g = sin(vPosition.y + u_time * 1.5) * 0.5 + 0.5;
-    float b = sin(vPosition.z + u_time * 0.5) * 0.5 + 0.5;
-    gl_FragColor = vec4(r, g, b, 1.0);
-}
-```
-
-**Water Waves:**
-```glsl
-// Vertex shader
-uniform float u_time;
-varying float vElevation;
-
-void main() {
-    vec3 pos = position;
-    float elevation = sin(pos.x * 4.0 + u_time) * 0.1;
-    elevation += sin(pos.y * 3.0 + u_time * 0.8) * 0.1;
-    pos.z += elevation;
-    vElevation = elevation;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
-}
-```
-
-## Loading Local Files
-
-To load local files, serve them via HTTP:
-
-```bash
-# Serve current directory on port 8080
-python3 -m http.server 8080
-```
-
-Then use `http://localhost:8080/model.obj` as the URL.
-
-## Requirements
-
-- Dioxus 0.5+
-- Internet connection (for Three.js CDN and external models)
+Existing props remain unchanged. Upgrade is additive.
 
 ## Changelog
 
-See [CHANGELOG.md](changelog.md) for version history.
+See [changelog.md](changelog.md) for version history.
 
-## Author
+## Contributing
 
-**Esteban Puello** - [eftech93@gmail.com](mailto:eftech93@gmail.com)
-
-- GitHub: [@eftech93](https://github.com/eftech93)
-- Repository: [github.com/eftech93/dioxus-three](https://github.com/eftech93/dioxus-three)
-
-## License
-
-MIT OR Apache-2.0
+See [CONTRIBUTING.md](../CONTRIBUTING.md).

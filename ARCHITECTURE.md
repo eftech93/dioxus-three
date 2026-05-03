@@ -2,112 +2,216 @@
 
 ## Overview
 
-Dioxus Three is a Dioxus Desktop component that renders interactive 3D content using Three.js via a WebView, rather than native GPU rendering. This approach avoids platform-specific GPU issues while providing full access to Three.js's mature 3D capabilities.
+Dioxus Three is a cross-platform Dioxus component that renders interactive 3D content using Three.js. It supports Desktop (WebView), Web (WASM), and Mobile (WebView) platforms through three distinct implementations that share a common Rust API.
 
 ## Architecture Diagram
 
 ```
-┌─────────────────────────────────────────────┐
-│              Dioxus Desktop App             │
-│                                             │
-│  ┌─────────────────────────────────────┐   │
-│  │         WebView Component           │   │
-│  │                                     │   │
-│  │   ┌─────────────────────────────┐  │   │
-│  │   │     Three.js Scene          │  │   │
-│  │   │                             │  │   │
-│  │   │   ┌─────┐ ┌─────┐ ┌─────┐  │  │   │
-│  │   │   │Mesh │ │Mesh │ │Mesh │  │  │   │
-│  │   │   └─────┘ └─────┘ └─────┘  │  │   │
-│  │   │                             │  │   │
-│  │   │   ┌─────┐ ┌─────┐ ┌─────┐  │  │   │
-│  │   │   │Light│ │Light│ │Camera│  │  │   │
-│  │   │   └─────┘ └─────┘ └─────┘  │  │   │
-│  │   └─────────────────────────────┘  │   │
-│  │                                     │   │
-│  │   ┌─────────────────────────────┐  │   │
-│  │   │   ShaderMaterial (GLSL)     │  │   │
-│  │   │                             │  │   │
-│  │   │   ┌─────┐ ┌─────┐ ┌─────┐  │  │   │
-│  │   │   │ vs  │ │ fs  │ │uni  │  │  │   │
-│  │   │   └─────┘ └─────┘ └─────┘  │  │   │
-│  │   └─────────────────────────────┘  │   │
-│  └─────────────────────────────────────┘   │
-└─────────────────────────────────────────────┘
-         │
-         │ Props (one-way data flow)
-         ▼
-┌─────────────────────────────────────────────┐
-│              ThreeView Component            │
-│              (Dioxus Component)             │
-│                                             │
-│  ┌──────────────┐  ┌──────────────┐        │
-│  │ Model Loader │  │ Shader System│        │
-│  │              │  │              │        │
-│  │ • ObjLoader  │  │ • Presets    │        │
-│  │ • FbxLoader  │  │ • Custom     │        │
-│  │ • GltfLoader │  │ • Uniforms   │        │
-│  └──────────────┘  └──────────────┘        │
-│                                             │
-│  ┌──────────────┐  ┌──────────────┐        │
-│  │ Transform    │  │ Camera       │        │
-│  └──────────────┘  └──────────────┘        │
-└─────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                  Your Dioxus Application                    │
+│                                                             │
+│  ┌─────────────────┐    ┌──────────────────────────────┐  │
+│  │   ThreeView     │◄──►│      App State               │  │
+│  │   Component     │    │ (Selection, Transforms, etc.)│  │
+│  └────────┬────────┘    └──────────────────────────────┘  │
+│           │                                                 │
+│     ┌─────┴─────┐                                           │
+│     │  Bridge   │◄──► Events: Pointer, Gizmo, Selection    │
+│     │ (Platform │    State: Camera, Models, Gizmo config   │
+│     │  specific)│                                           │
+│     └─────┬─────┘                                           │
+└───────────┼─────────────────────────────────────────────────┘
+            │
+    ┌───────┴───────┐
+    │   Three.js    │
+    │   Renderer    │
+    └───────────────┘
 ```
 
-## Core Components
+## Platform Implementations
 
-### 1. `ThreeView` Component
+### Desktop (`src/desktop.rs`) — WebView + iframe
 
-The main Dioxus component that renders a Three.js scene in a WebView.
+Uses a WebView with an iframe containing a complete Three.js scene loaded from CDN.
 
-```rust
-#[component]
-pub fn ThreeView(props: ThreeViewProps) -> Element
+```
+┌─────────────────┐     ┌─────────────────────┐
+│   Dioxus App    │     │    WebView Iframe   │
+│                 │     │                     │
+│ ┌─────────────┐ │     │ ┌─────────────────┐ │
+│ │ ThreeView   │ │     │ │ Three.js Scene  │ │
+│ │ Component   │ │     │ │ (from CDN)      │ │
+│ └──────┬──────┘ │     │ │                 │ │
+│        │        │     │ │ • TransformCtrl │ │
+│        ▼        │     │ │ • OrbitControls │ │
+│ ┌─────────────┐ │     │ │ • Raycaster     │ │
+│ │ use_signal  │ │     │ │ • Model Loader  │ │
+│ │ (HTML once) │─┼────►│ │ • Outline FX    │ │
+│ └─────────────┘ │     │ └─────────────────┘ │
+│                 │     │          ▲          │
+│ ┌─────────────┐ │     │          │          │
+│ │document::eval│ │     │   postMessage       │
+│ │ (events in) │◄┼─────┤   (events out)      │
+│ └─────────────┘ │     └─────────────────────┘
+│                 │
+│ ┌─────────────┐ │
+│ │ postMessage │─┼────► update-state, camera,│
+│ │ (state out) │ │     gizmo, selection      │
+│ └─────────────┘ │     (no iframe reload)    │
+└─────────────────┘
 ```
 
-**Key Props:**
-- `model_url` - URL/path to 3D model
-- `format` - Model format (Obj, Fbx, Gltf, etc.)
-- `shader` - Shader effect preset
-- Transform (pos_x/y/z, rot_x/y/z, scale)
-- Camera (cam_x/y/z, target_x/y/z)
-- Appearance (color, wireframe, background)
+**Key design decisions:**
 
-### 2. HTML Generation (`generate_three_js_html`)
+1. **HTML generated once**: The complete HTML document is generated via `use_signal` only when the model count changes.
+2. **State updates via `postMessage`**: Camera, selection, gizmo, and style updates are sent without iframe regeneration.
+3. **Event bridge via `document::eval`**: Pointer events, gizmo drag events, and selection changes are received via `document::eval` polling.
+4. **Official `THREE.TransformControls`**: Gizmos are the official Three.js controls.
 
-Generates the HTML document that runs inside the WebView:
+### Web (`src/web.rs`) — Native Canvas + WASM
 
-1. **Template Setup** - Creates HTML skeleton with Three.js CDN
-2. **Material Generation** - Creates MeshStandardMaterial or ShaderMaterial
-3. **Model Loading** - Injects appropriate Three.js loader based on format
-4. **Scene Building** - Camera, lights, renderer, helpers
-5. **Animation Loop** - Handles auto-rotation and shader time updates
+Renders directly to a `<canvas>` element using Three.js via WASM.
 
-### 3. Model Loader System
-
-Supports multiple 3D formats via Three.js loaders loaded on-demand:
-
-```rust
-pub enum ModelFormat {
-    Obj, Fbx, Gltf, Glb, Stl, Ply, Dae, Json,
-    Cube,  // Built-in default
-}
+```
+┌──────────────────────────────────────────┐
+│            Dioxus App (WASM)             │
+│                                          │
+│  ┌─────────────┐    ┌─────────────────┐  │
+│  │ ThreeView   │    │ wasm_bindgen    │  │
+│  │ Component   │◄──►│ Closures        │  │
+│  └──────┬──────┘    │                 │  │
+│         │           │ • pointer down  │  │
+│         ▼           │ • pointer move  │  │
+│  ┌─────────────┐    │ • gizmo drag    │  │
+│  │  <canvas>   │    │ • selection     │  │
+│  │  Element    │    └─────────────────┘  │
+│  └──────┬──────┘                         │
+│         │                                 │
+│         ▼                                 │
+│  ┌─────────────────────────────────────┐  │
+│  │         Three.js (JS)               │  │
+│  │                                     │  │
+│  │  • Custom gizmos (arrows, tori,    │  │
+│  │    boxes)                           │  │
+│  │  • Manual raycasting                │  │
+│  │  • Plane-intersection drag math     │  │
+│  │  • OrbitControls                    │  │
+│  │  • Model loader                     │  │
+│  │  • Outline FX                       │  │
+│  └─────────────────────────────────────┘  │
+└──────────────────────────────────────────┘
 ```
 
-**Loader Injection:**
-Each format has a corresponding CDN script that gets conditionally injected.
+**Key design decisions:**
 
-**Loading Flow:**
-1. User provides URL + format
-2. HTML generator adds appropriate loader script
-3. Three.js loads the model asynchronously
-4. On success: Apply material, center/scale if enabled
-5. On error: Fallback to cube with error logged
+1. **Custom-built gizmos**: Handles built from Three.js primitives with manual raycasting.
+2. **Manual drag math**: Camera-facing plane intersection for translate, arcball for rotate, distance-based for scale.
+3. **Bridge via `wasm_bindgen`**: Events sent via `dioxusThreeRustBridge` JS function.
+4. **Live state references**: `updateGizmo` reads from `canvas.dioxusThreeState` to avoid stale references.
 
-### 4. Shader System
+### Mobile (`src/mobile.rs`)
 
-**ShaderPreset Enum:**
+Uses the same WebView approach as Desktop. Gizmo features exist but have not been fully tested.
+
+## Shared Components
+
+### `src/lib.rs` — Platform-Independent Core
+
+- `ThreeViewProps` — All component properties
+- `ModelConfig`, `ShaderPreset` — Model and shader types
+- `generate_three_js_html()` — Desktop iframe HTML generation
+- Model loading JS builders
+- Selection, gizmo, and event types
+
+### `src/input.rs` — Input System
+
+- `EntityId`, `Vector3`
+- `PointerEvent`, `PointerDragEvent`, `GestureEvent`
+- `RaycastConfig`
+
+### `src/selection.rs` — Selection System
+
+- `Selection` — List of selected entities
+- `SelectionMode` — Single, Multiple
+- `SelectionStyle` — Outline color, width, glow
+
+### `src/gizmos.rs` — Gizmo System
+
+- `Gizmo` — Target, mode, space, size, visibility flags
+- `GizmoMode` — Translate, Rotate, Scale
+- `GizmoSpace` — World, Local
+- `GizmoEvent`, `GizmoTransform`
+
+## Data Flow
+
+### Desktop Event Flow
+
+```
+User clicks in iframe
+    │
+    ▼
+iframe JS: raycaster.intersectObjects(scene)
+    │
+    ▼
+iframe JS: Check if click is on gizmo handle (isMesh check)
+    │
+    ├── Yes → TransformControls handles it → postMessage("gizmo-drag")
+    │
+    └── No  → Check model hit → postMessage("selection-change")
+                  │
+                  ▼
+         Rust (document::eval): Receive postMessage
+                  │
+                  ▼
+         Update signals (selection, gizmo, transforms)
+                  │
+                  ▼
+         Re-render with new props
+                  │
+                  ▼
+         ThreeView detects prop changes
+                  │
+                  ▼
+         Send postMessage("update-state") to iframe
+                  │
+                  ▼
+         iframe updates camera, gizmo, selection, outline
+```
+
+### Web Event Flow
+
+```
+User clicks on canvas
+    │
+    ▼
+JS pointerdown: raycaster.intersectObjects(gizmoGroup)
+    │
+    ▼
+Check if hit is on gizmo handle
+    │
+    ├── Yes → Start gizmo drag
+    │           On move: plane-intersection math
+    │           On up: end drag, call dioxusThreeRustBridge("gizmoDrag", ...)
+    │
+    └── No  → raycaster.intersectObjects(modelContainer)
+                  │
+                  ▼
+         Hit model → dioxusThreeRustBridge("pointerDown", ...)
+                  │
+                  ▼
+         Rust closure: Update selection signal
+                  │
+                  ▼
+         Re-render → updateGizmo() reads live entityMap
+                  │
+                  ▼
+         Gizmo positioned at new target
+```
+
+## Shader System
+
+### ShaderPreset Enum
+
 ```rust
 pub enum ShaderPreset {
     None,                                    // Standard PBR
@@ -119,7 +223,8 @@ pub enum ShaderPreset {
 }
 ```
 
-**ShaderConfig:**
+### ShaderConfig
+
 ```rust
 pub struct ShaderConfig {
     pub vertex_shader: Option<String>,
@@ -139,37 +244,7 @@ pub struct ShaderConfig {
 7. Uniforms are passed as JavaScript object
 8. If animated, `u_time` uniform is updated in render loop
 
-**Built-in Shaders:**
-- Located in `shaders/` directory
-- GLSL files: `water.frag`, `fire.frag`, `gradient.frag`, `pulse.frag`
-- Embedded in Rust code as string literals
-
-**Custom Shader Example:**
-```rust
-let shader = ShaderConfig {
-    vertex_shader: Some(r#"
-        varying vec2 vUv;
-        void main() {
-            vUv = uv;
-            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-    "#.to_string()),
-    fragment_shader: Some(r#"
-        uniform vec3 u_color;
-        varying vec2 vUv;
-        void main() {
-            gl_FragColor = vec4(u_color * vUv.x, 1.0);
-        }
-    "#.to_string()),
-    uniforms: [("u_color".to_string(), ShaderUniform::Color("#ff0000".to_string()))]
-        .into_iter().collect(),
-    animated: false,
-};
-```
-
-### 5. Uniform System
-
-Shader uniforms pass data from JavaScript to GLSL:
+### Uniform System
 
 ```rust
 pub enum ShaderUniform {
@@ -185,106 +260,100 @@ pub enum ShaderUniform {
 - `u_resolution` - Viewport dimensions
 - `u_color` - Mesh color from props
 
-## Data Flow
-
-### Props → HTML Generation
-
-```
-ThreeViewProps
-    │
-    ├──> generate_three_js_html()
-    │         │
-    │         ├──> Build HTML template
-    │         ├──> Inject Three.js CDN
-    │         ├──> Generate material code
-    │         │       └── shader.vertex_shader()
-    │         │       └── shader.fragment_shader()
-    │         │       └── shader.uniforms()
-    │         ├──> Inject model loader
-    │         ├──> Build scene graph
-    │         └──> Setup animation loop
-    │               └── shader.is_animated()
-    │
-    └──> Render WebView with srcdoc
-```
-
-### Component Lifecycle
-
-1. **Mount** - `ThreeView` renders WebView with generated HTML
-2. **Load** - Three.js initializes, model loads asynchronously
-3. **Animate** - RequestAnimationFrame loop runs
-4. **Update** - Props changes regenerate HTML (full re-render)
-
 ## Technical Decisions
 
-### Why Three.js via WebView?
+### Why Three.js?
 
 **Rejected Approach:** Native wgpu
 - ❌ Requires event loop on main thread
 - ❌ Dual window setup problematic on macOS
 - ❌ Complex platform-specific window management
 
-**Chosen Approach:** Three.js in WebView
-- ✅ Single window, simpler lifecycle
+**Chosen Approach:** Three.js
 - ✅ Mature 3D library with extensive loaders
 - ✅ GLSL shader support built-in
 - ✅ Cross-platform consistency
 - ✅ Easy asset loading via HTTP
+- ✅ Active ecosystem
 
-### Why No Rust ↔ JS Bridge?
+### Why Different Implementations per Platform?
 
-Data flows one-way: Rust props → HTML string → WebView
-- Simpler implementation
-- No async complexity
-- Props change triggers full re-render (acceptable for this use case)
+**Desktop (WebView iframe):**
+- Can load Three.js from CDN easily
+- Official `TransformControls` available
+- Simpler event bridging via `postMessage`
 
-### ShaderPreset vs Custom Shaders
+**Web (Canvas + WASM):**
+- Cannot use iframe in WASM context
+- Direct canvas rendering for better performance
+- Custom gizmos needed since CDN scripts can't be injected the same way
 
-**Built-in presets** provide:
-- Zero configuration effects
-- Consistent naming
-- Optimized GLSL
+**Mobile (WebView):**
+- Same constraints as Desktop
+- Shares implementation approach
 
-**Custom shaders** provide:
-- Full creative control
-- Domain-specific effects
-- Integration with existing shader libraries
+### Rust ↔ JS Bridge
+
+The original design had no bridge (one-way props → HTML). v0.0.3 added bidirectional communication:
+
+- **Desktop**: `document::eval` + `postMessage` for events and state updates
+- **Web**: `wasm_bindgen` closures (`dioxusThreeRustBridge`) for events
+
+State updates no longer trigger full iframe reloads on Desktop. Only model count changes regenerate HTML.
 
 ## File Structure
 
 ```
 dioxus-three/
 ├── src/
-│   └── lib.rs              # Main component and shader system
+│   ├── lib.rs              # Platform-independent core, HTML generation
+│   ├── desktop.rs          # Desktop: WebView iframe implementation
+│   ├── web.rs              # Web: Canvas + WASM implementation
+│   ├── mobile.rs           # Mobile: WebView implementation
+│   ├── input.rs            # Input types (PointerEvent, RaycastConfig, etc.)
+│   ├── selection.rs        # Selection types and logic
+│   └── gizmos.rs           # Gizmo types and configuration
 ├── shaders/
 │   ├── water.frag          # Water wave effect
 │   ├── fire.frag           # Fire effect
 │   ├── gradient.frag       # Color gradient
 │   └── pulse.frag          # Pulsing animation
 ├── examples/
-│   └── demo/
-│       └── src/
-│           └── main.rs     # Demo application
-└── README.md
+│   ├── demo/               # Desktop demo
+│   ├── web-demo/           # Web/WASM demo
+│   └── mobile-demo/        # Mobile demo
+└── docs/                   # Documentation
 ```
-
-## Future Enhancements
-
-Potential improvements:
-1. **Texture Support** - Load custom textures via URLs
-2. **Lighting Controls** - Adjustable lights (directional, point, ambient)
-3. **Post-processing** - Bloom, DOF, SSAO effects
-4. **Animation Clips** - Play skeletal animations from glTF/FBX
-5. **Interaction** - Raycasting for click/hover events
-6. **Performance** - Virtual scrolling for multiple views
-7. **Offline Mode** - Bundle Three.js instead of CDN
-8. **Shader Hot-reload** - Edit shaders and see changes live
 
 ## Performance Considerations
 
+### Preventing Reloads During Gizmo Drag
+
+**Critical**: Do not bake `transform_overrides` into `props.models`.
+
+❌ Bad (causes full reload every frame):
+```rust
+let model_configs = models.read().iter().enumerate().map(|(i, m)| {
+    let mut config = m.config.clone();
+    if let Some(ovr) = overrides.get(&i) {
+        config.pos_x = ovr.position.x;
+    }
+    config
+}).collect::<Vec<_>>();
+```
+
+✅ Good (stable configs):
+```rust
+let model_configs = models.read().iter().map(|m| m.config.clone()).collect::<Vec<_>>();
+```
+
+The gizmo directly manipulates JS-side objects. Overrides are only for UI readout and persistence.
+
+### Other Considerations
+
 - **Model size** - Large models may take time to download/parse
 - **Shader complexity** - Complex fragment shaders impact FPS
-- **Multiple views** - Each WebView is a separate process
+- **Multiple views** - Each WebView is a separate process (Desktop)
 - **Memory** - Three.js scene holds GPU resources
 
 ## Security Notes
@@ -293,3 +362,14 @@ Potential improvements:
 - JavaScript runs in isolated WebView
 - No eval() or dynamic code execution from user input
 - Shader code is sanitized (basic HTML escaping)
+
+## Future Enhancements
+
+Potential improvements:
+1. **Texture Support** - Load custom textures via URLs
+2. **Lighting Controls** - Adjustable lights (directional, point, ambient)
+3. **Post-processing** - Bloom, DOF, SSAO effects
+4. **Animation Clips** - Play skeletal animations from glTF/FBX
+5. **Performance** - Virtual scrolling for multiple views
+6. **Offline Mode** - Bundle Three.js instead of CDN
+7. **Shader Hot-reload** - Edit shaders and see changes live

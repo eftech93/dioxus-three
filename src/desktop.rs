@@ -155,6 +155,13 @@ pub fn ThreeView(mut props: ThreeViewProps) -> Element {
                 r#"
                 window._dioxusThreeEvents = [];
                 window.addEventListener('message', function(e) {
+                    // Only process messages from our Three.js iframe
+                    var iframe = document.querySelector('iframe[srcdoc]');
+                    if (iframe && iframe.contentWindow && e.source !== iframe.contentWindow) {
+                        // Not from our iframe, but still allow if it looks like our event format
+                        // (some WebView implementations don't set e.source correctly)
+                        if (!e.data || !e.data.type) return;
+                    }
                     if (e.data && (
                         e.data.type === 'gizmo-drag' || 
                         e.data.type === 'pointer-down' ||
@@ -162,6 +169,7 @@ pub fn ThreeView(mut props: ThreeViewProps) -> Element {
                         e.data.type === 'pointer-move' ||
                         e.data.type === 'selection-change'
                     )) {
+                        console.log('[EVAL BRIDGE] received:', e.data.type);
                         window._dioxusThreeEvents.push(e.data);
                         dioxus.send(e.data);
                     }
@@ -178,9 +186,12 @@ pub fn ThreeView(mut props: ThreeViewProps) -> Element {
                     Ok(event) => {
                         let event_type = event.get("type").and_then(|v| v.as_str());
                         let data = event.get("data");
+                        
+                        println!("[DESKTOP BRIDGE] received event: {:?}", event_type);
 
                         match event_type {
                             Some("gizmo-drag") => {
+                                println!("[DESKTOP BRIDGE] gizmo-drag event");
                                 if let (Some(cb), Some(data)) = (&on_gizmo_drag, data) {
                                     if let Some(gizmo_event) = parse_gizmo_event(data) {
                                         cb.call(gizmo_event);
@@ -188,10 +199,16 @@ pub fn ThreeView(mut props: ThreeViewProps) -> Element {
                                 }
                             }
                             Some("pointer-down") => {
+                                println!("[DESKTOP BRIDGE] pointer-down event");
                                 if let (Some(cb), Some(data)) = (&on_pointer_down, data) {
                                     if let Some(ptr_event) = parse_pointer_event(data) {
+                                        println!("[DESKTOP BRIDGE] parsed pointer-down: hit={:?}", ptr_event.hit.as_ref().map(|h| h.entity_id));
                                         cb.call(ptr_event);
+                                    } else {
+                                        println!("[DESKTOP BRIDGE] failed to parse pointer-down");
                                     }
+                                } else {
+                                    println!("[DESKTOP BRIDGE] no pointer-down callback registered");
                                 }
                             }
                             Some("pointer-up") => {
@@ -228,7 +245,8 @@ pub fn ThreeView(mut props: ThreeViewProps) -> Element {
                             _ => {}
                         }
                     }
-                    Err(_) => {
+                    Err(e) => {
+                        println!("[DESKTOP BRIDGE] eval recv error: {:?}", e);
                         // Eval finished or error, break the loop
                         break;
                     }

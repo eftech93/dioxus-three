@@ -74,6 +74,8 @@ This mobile demo includes:
 - 📦 **Model Management** - Horizontal scrolling model list
 - 🔄 **Auto-rotation** - Toggle with one tap
 - 🎯 **Transform Controls** - Position, rotation, scale editing
+- 🖱️ **Object Selection** - Tap to select objects
+- 🔧 **Gizmo Manipulation** - Translate, Rotate, Scale handles (experimental)
 - 📷 **Camera Presets** - Top, Side, Isometric views
 
 ## Architecture

@@ -378,6 +378,7 @@ pub fn ThreeView(props: ThreeViewProps) -> Element {
     let mut show_axes = use_signal(|| props.show_axes);
     let mut wireframe = use_signal(|| props.wireframe);
     let mut models = use_signal(|| props.models.clone());
+    let mut prev_models = use_signal(|| props.models.clone());
     
     // Phase 1: Selection and gizmo state
     let mut selection = use_signal(|| props.selection.clone());
@@ -416,7 +417,13 @@ pub fn ThreeView(props: ThreeViewProps) -> Element {
         show_grid.set(new_props.show_grid);
         show_axes.set(new_props.show_axes);
         wireframe.set(new_props.wireframe);
-        models.set(new_props.models.clone());
+        // Only update models signal if structurally changed (avoids reload during gizmo drag)
+        let current_models = prev_models();
+        if new_props.models != current_models {
+            models.set(new_props.models.clone());
+            prev_models.set(new_props.models.clone());
+        }
+        
         selection.set(new_props.selection.clone());
         gizmo.set(new_props.gizmo.clone());
         selection_style.set(new_props.selection_style.clone());
@@ -917,8 +924,20 @@ fn create_scene(canvas: &web_sys::Element) {
                         if (sourceMesh.parent) {{
                             const box = new THREE.Box3().setFromObject(sourceMesh);
                             const center = box.getCenter(new THREE.Vector3());
+                            const currentSize = box.getSize(new THREE.Vector3());
+                            const originalSize = outlineGroup.userData.originalSize;
+                            
                             outlineGroup.position.copy(center);
                             outlineGroup.rotation.copy(sourceMesh.rotation);
+                            
+                            // Scale outline to match object's current bounding box
+                            if (originalSize && originalSize.x > 0 && originalSize.y > 0 && originalSize.z > 0) {{
+                                outlineGroup.scale.set(
+                                    currentSize.x / originalSize.x,
+                                    currentSize.y / originalSize.y,
+                                    currentSize.z / originalSize.z
+                                );
+                            }}
                         }}
                     }}
                     
@@ -1021,31 +1040,12 @@ fn create_scene(canvas: &web_sys::Element) {
                                 const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
                                 objOutlineGroup.add(glowMesh);
                                 
-                                // Corner markers - small cubes at corners
-                                const cornerSize = maxDim * 0.08;
-                                const cornerGeometry = new THREE.BoxGeometry(cornerSize, cornerSize, cornerSize);
-                                const cornerMaterial = new THREE.MeshBasicMaterial({{ color: outlineColorNum }});
-                                
-                                const corners = [
-                                    {{ x: 1, y: 1, z: 1 }}, {{ x: -1, y: 1, z: 1 }},
-                                    {{ x: 1, y: -1, z: 1 }}, {{ x: -1, y: -1, z: 1 }},
-                                    {{ x: 1, y: 1, z: -1 }}, {{ x: -1, y: 1, z: -1 }},
-                                    {{ x: 1, y: -1, z: -1 }}, {{ x: -1, y: -1, z: -1 }}
-                                ];
-                                
-                                corners.forEach(corner => {{
-                                    const cornerMesh = new THREE.Mesh(cornerGeometry, cornerMaterial);
-                                    cornerMesh.position.set(
-                                        corner.x * size.x * 0.55,
-                                        corner.y * size.y * 0.55,
-                                        corner.z * size.z * 0.55
-                                    );
-                                    objOutlineGroup.add(cornerMesh);
-                                }});
-                                
                                 // Position and rotate to match object
                                 objOutlineGroup.position.copy(center);
                                 objOutlineGroup.rotation.copy(child.rotation);
+                                
+                                // Store original size for scale tracking
+                                objOutlineGroup.userData = {{ originalSize: size.clone() }};
                                 
                                 outlineGroup.add(objOutlineGroup);
                                 outlineToMeshMap.set(objOutlineGroup, child);
@@ -1191,7 +1191,7 @@ fn create_scene(canvas: &web_sys::Element) {
                         gizmoGroup.add(zHit);
                     }} else if (mode === 'scale') {{
                         // Create scale gizmo (boxes at ends)
-                        const boxGeometry = new THREE.BoxGeometry(0.18 * gizmoSize, 0.18 * gizmoSize, 0.18 * gizmoSize);
+                        const boxGeometry = new THREE.BoxGeometry(0.22 * gizmoSize, 0.22 * gizmoSize, 0.22 * gizmoSize);
                         const lineGeometry = new THREE.BufferGeometry().setFromPoints([
                             new THREE.Vector3(0, 0, 0),
                             new THREE.Vector3(1, 0, 0)

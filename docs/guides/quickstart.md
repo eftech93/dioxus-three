@@ -319,9 +319,66 @@ fn app() -> Element {
 }
 ```
 
+## 8. Selection & Gizmos (v0.0.3+)
+
+Click to select objects and manipulate them with transform gizmos:
+
+```rust
+use dioxus::prelude::*;
+use dioxus_three::{ThreeView, ModelConfig, ModelFormat, Gizmo, GizmoMode, Selection, SelectionMode};
+
+fn app() -> Element {
+    let mut selection = use_signal(|| Selection::empty());
+    let mut gizmo = use_signal(|| None::<Gizmo>);
+    let mut gizmo_mode = use_signal(|| GizmoMode::Translate);
+
+    let models = vec![
+        ModelConfig::new("model.glb", ModelFormat::Glb)
+            .with_position(-1.0, 0.0, 0.0),
+        ModelConfig::new("", ModelFormat::Cube)
+            .with_position(1.0, 0.0, 0.0)
+            .with_color("#4ecdc4"),
+    ];
+
+    rsx! {
+        div { style: "display: flex; height: 100vh;",
+            // Toolbar
+            div { style: "position: absolute; top: 20px; left: 50%; transform: translateX(-50%); z-index: 10;",
+                button { onclick: move |_| gizmo_mode.set(GizmoMode::Translate), "Move" }
+                button { onclick: move |_| gizmo_mode.set(GizmoMode::Rotate), "Rotate" }
+                button { onclick: move |_| gizmo_mode.set(GizmoMode::Scale), "Scale" }
+            }
+
+            ThreeView {
+                models: models,
+                selection: selection(),
+                selection_mode: SelectionMode::Single,
+                on_selection_change: move |sel| {
+                    selection.set(sel.clone());
+                    gizmo.set(sel.primary().map(|id| {
+                        Gizmo::new(id)
+                            .with_mode(gizmo_mode())
+                            .with_space(dioxus_three::GizmoSpace::World)
+                    }));
+                },
+                gizmo: gizmo(),
+                on_gizmo_drag: move |event| {
+                    println!("{:?}: {:?}", event.mode, event.transform);
+                    if event.is_finished {
+                        println!("Drag finished!");
+                    }
+                },
+            }
+        }
+    }
+}
+```
+
 ## Next Steps
 
 - Learn about [supported formats](formats.md)
 - Explore [shader effects](shaders.md)
+- Read about [pointer events & selection](pointer-selection.md)
+- Read about [transform gizmos](transform.md)
 - Read the [API reference](../api/threeview.md)
 - Understand the [architecture](architecture.md)

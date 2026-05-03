@@ -85,19 +85,10 @@ fn app() -> Element {
         ("Duck (glTF)", "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Duck/glTF/Duck.gltf", ModelFormat::Gltf),
     ];
 
-    let model_configs: Vec<ModelConfig> = models.read().iter().enumerate().map(|(idx, m)| {
-        let mut config = m.config.clone();
-        if let Some(override_tf) = transform_overrides.read().get(&idx) {
-            config.pos_x = override_tf.position.x;
-            config.pos_y = override_tf.position.y;
-            config.pos_z = override_tf.position.z;
-            config.rot_x = override_tf.rotation.x.to_degrees();
-            config.rot_y = override_tf.rotation.y.to_degrees();
-            config.rot_z = override_tf.rotation.z.to_degrees();
-            config.scale = override_tf.scale.x;
-        }
-        config
-    }).collect();
+    // NOTE: We do NOT bake transform_overrides into model_configs passed to ThreeView.
+    // The gizmo directly manipulates objects in the Three.js scene. Baking overrides here
+    // would cause model reloads on every drag frame, killing fluidity.
+    let model_configs: Vec<ModelConfig> = models.read().iter().map(|m| m.config.clone()).collect();
 
     rsx! {
         link { rel: "stylesheet", href: "https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" }

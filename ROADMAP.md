@@ -78,9 +78,9 @@ fn app() -> Element {
 
 ---
 
-## Pointer & Selection System
+## Pointer & Selection System ✅ (Completed in v0.0.3)
 
-### 3. **Raycasting API**
+### 3. **Raycasting API** ✅
 Full raycasting support for mouse/touch interaction:
 
 ```rust
@@ -173,7 +173,7 @@ fn app() -> Element {
 }
 ```
 
-### 4. **Selection API**
+### 4. **Selection API** ✅
 Manage selection state with visual feedback:
 
 ```rust
@@ -220,7 +220,7 @@ fn app() -> Element {
 }
 ```
 
-### 5. **Gizmos & Manipulators**
+### 5. **Gizmos & Manipulators** ✅
 Visual handles for transforming selected objects:
 
 ```rust
