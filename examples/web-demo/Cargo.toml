@@ -23,6 +23,7 @@ web-sys = { version = "0.3", features = [
 ] }
 getrandom = { version = "0.2", features = ["js"] }
 console_error_panic_hook = "0.1"
+tracing-wasm = "0.2"
 
 [profile.release]
 opt-level = 3

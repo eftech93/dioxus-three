@@ -6,7 +6,7 @@
 ## Requirements
 
 - **Rust** 1.76+ (install from [rustup.rs](https://rustup.rs))
-- **Dioxus** 0.5+
+- **Dioxus** 0.6+
 - **Internet connection** (for Three.js CDN and external models)
 
 ## Add to Your Project
@@ -16,7 +16,7 @@ Add `dioxus-three` to your `Cargo.toml`:
 ```toml
 [dependencies]
 dioxus-three = "0.0.3"
-dioxus = { version = "0.5", features = ["desktop"] }
+dioxus = { version = "0.6", features = ["desktop"] }
 ```
 
 ### Platform-Specific Dependencies
@@ -25,23 +25,23 @@ dioxus = { version = "0.5", features = ["desktop"] }
 ```toml
 [dependencies]
 dioxus-three = "0.0.3"
-dioxus = { version = "0.5", features = ["desktop"] }
-dioxus-desktop = "0.5"
+dioxus = { version = "0.6", features = ["desktop"] }
+dioxus-desktop = "0.6"
 ```
 
 **For Web (WASM):**
 ```toml
 [dependencies]
 dioxus-three = "0.0.3"
-dioxus = { version = "0.5", features = ["web"] }
+dioxus = { version = "0.6", features = ["web"] }
 ```
 
 **For Mobile:**
 ```toml
 [dependencies]
 dioxus-three = "0.0.3"
-dioxus = { version = "0.5", features = ["mobile"] }
-dioxus-mobile = "0.5"
+dioxus = { version = "0.6", features = ["mobile"] }
+dioxus-mobile = "0.6"
 ```
 
 ## Running the Demo
@@ -124,7 +124,7 @@ If you get compilation errors, ensure you have the correct Dioxus version:
 
 ```toml
 [dependencies]
-dioxus = { version = "0.5", features = ["desktop"] }
+dioxus = { version = "0.6", features = ["desktop"] }
 dioxus-three = "0.0.3"
 ```
 
@@ -158,4 +158,4 @@ rustup target add wasm32-unknown-unknown
 
 Ensure you have the Android SDK (for Android) or Xcode (for iOS) installed.
 
-See the [Dioxus Mobile documentation](https://dioxuslabs.com/learn/0.5/reference/mobile) for setup instructions.
+See the [Dioxus Mobile documentation](https://dioxuslabs.com/learn/0.6/reference/mobile) for setup instructions.

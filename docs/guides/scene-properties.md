@@ -663,13 +663,16 @@ fn ShaderSelect(current: Signal<ShaderPreset>) -> Element {
 
 ### Desktop Platform
 
-On desktop, the WebView iframe regenerates the entire HTML when props change. This is efficient for most use cases:
+On desktop, the WebView iframe HTML is generated once and only regenerated when the model count changes. All other prop updates (camera, selection, gizmo, etc.) are sent via `postMessage` without iframe reload:
 
 ```rust
-// Desktop - Full HTML regeneration on each change
+// Desktop - postMessage state update (no reload)
 ThreeView {
-    cam_x: cam_x(),  // Triggers full re-render
+    cam_x: cam_x(),  // Sends postMessage to iframe
 }
+
+// Only this triggers HTML regeneration:
+models.write().push(new_model);  // Model count changed
 ```
 
 ### Web Platform

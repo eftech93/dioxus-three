@@ -48,6 +48,8 @@ This web demo includes:
 - 🔄 **Auto-rotation** - Adjustable rotation speed
 - 📦 **Preset Models** - Quick-load popular Three.js example models
 - 🎯 **Transform Controls** - Position, rotation, scale, and color per model
+- 🖱️ **Object Selection** - Click to select objects with outline highlight
+- 🔧 **Gizmo Manipulation** - Translate, Rotate, Scale handles for selected objects
 
 ## Browser Compatibility
 

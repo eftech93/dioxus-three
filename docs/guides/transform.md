@@ -2,9 +2,11 @@
 
 Control the position, rotation, and scale of your 3D models.
 
-## Position
+## Static Transforms
 
-Move the model in 3D space:
+Set transforms via props:
+
+### Position
 
 ```rust
 rsx! {
@@ -16,9 +18,7 @@ rsx! {
 }
 ```
 
-## Rotation
-
-Rotate the model (in degrees):
+### Rotation
 
 ```rust
 rsx! {
@@ -30,7 +30,172 @@ rsx! {
 }
 ```
 
-### Interactive Rotation
+### Scale
+
+```rust
+rsx! {
+    ThreeView {
+        scale: 2.0,  // Double size
+    }
+}
+```
+
+## Interactive Gizmos (v0.0.3+)
+
+Manipulate objects interactively with visual drag handles:
+
+### Basic Gizmo
+
+```rust
+#[component]
+fn SceneWithGizmo() -> Element {
+    let mut selection = use_signal(|| Selection::empty());
+    let mut gizmo = use_signal(|| None::<Gizmo>);
+
+    rsx! {
+        ThreeView {
+            models: vec![
+                ModelConfig::new("model.glb", ModelFormat::Glb)
+            ],
+            selection: Some(selection()),
+            on_selection_change: move |sel| {
+                selection.set(sel.clone());
+                gizmo.set(sel.primary().map(|id| Gizmo::new(id)));
+            },
+            gizmo: gizmo(),
+        }
+    }
+}
+```
+
+Click the model to select it, then drag the gizmo handles to transform it.
+
+### Gizmo Modes
+
+Switch between Translate, Rotate, and Scale:
+
+```rust
+let mut gizmo = use_signal(|| Some(Gizmo::new(EntityId(0)).with_mode(GizmoMode::Translate)));
+
+// Switch mode
+rsx! {
+    button { onclick: move |_| gizmo.set(gizmo().map(|g| g.with_mode(GizmoMode::Rotate))), "Rotate" }
+    button { onclick: move |_| gizmo.set(gizmo().map(|g| g.with_mode(GizmoMode::Scale))), "Scale" }
+    button { onclick: move |_| gizmo.set(gizmo().map(|g| g.with_mode(GizmoMode::Translate))), "Translate" }
+}
+```
+
+### Gizmo Space
+
+```rust
+Gizmo::new(EntityId(0))
+    .with_mode(GizmoMode::Rotate)
+    .with_space(GizmoSpace::Local)  // Local object space
+    // or .with_space(GizmoSpace::World)  // World space
+```
+
+### Gizmo Visibility
+
+Control which handles are visible:
+
+```rust
+Gizmo {
+    target: EntityId(0),
+    mode: GizmoMode::Translate,
+    show_x: true,
+    show_y: true,
+    show_z: true,
+    show_planes: true,   // Plane handles (translate only)
+    show_xyz: true,      // Uniform scale handle (scale only)
+    size: 1.5,           // Visual size
+    ..Default::default()
+}
+```
+
+### Handling Gizmo Drag Events
+
+```rust
+let mut transform_overrides = use_signal(|| HashMap::<usize, GizmoTransform>::new());
+
+ThreeView {
+    gizmo: gizmo(),
+    on_gizmo_drag: move |event: GizmoEvent| {
+        // Live transform during drag
+        println!("{:?}: {:?}", event.mode, event.transform);
+        
+        // Store for UI readout
+        transform_overrides.write().insert(event.target.0, event.transform);
+        
+        // Persist when drag finishes
+        if event.is_finished {
+            println!("Final: {:?}", event.transform);
+            // Write back to your app state here
+        }
+    },
+}
+```
+
+### Transform Readout UI
+
+Display live transform values:
+
+```rust
+if let Some(primary) = selection().primary() {
+    let idx = primary.0;
+    let tf = transform_overrides.read()
+        .get(&idx)
+        .cloned()
+        .unwrap_or_else(|| {
+            let m = &models.read()[idx].config;
+            GizmoTransform {
+                position: Vector3::new(m.pos_x, m.pos_y, m.pos_z),
+                rotation: Vector3::new(m.rot_x.to_radians(), m.rot_y.to_radians(), m.rot_z.to_radians()),
+                scale: Vector3::new(m.scale, m.scale, m.scale),
+            }
+        });
+
+    div { class: "transform-panel",
+        p { "Position: ({:.2}, {:.2}, {:.2})", tf.position.x, tf.position.y, tf.position.z }
+        p { "Rotation: ({:.2}, {:.2}, {:.2})", tf.rotation.x, tf.rotation.y, tf.rotation.z }
+        p { "Scale: ({:.2}, {:.2}, {:.2})", tf.scale.x, tf.scale.y, tf.scale.z }
+    }
+}
+```
+
+## Platform Differences
+
+| Feature | Desktop | Web |
+|---------|---------|-----|
+| Gizmo implementation | `THREE.TransformControls` | Custom-built handles |
+| Translate drag | Plane snapping (official) | Camera-facing plane intersection |
+| Rotate drag | Arcball (official) | Arcball rotation |
+| Scale drag | Relative scaling (official) | Distance-based scaling |
+| Handle occlusion | Never (depthTest disabled) | Never (depthTest disabled) |
+| Event bridge | `document::eval` + `postMessage` | `wasm_bindgen` closures |
+
+## Performance Notes
+
+**Critical**: Do not bake `transform_overrides` into `props.models`.
+
+❌ Bad — causes full scene reload every frame during drag:
+```rust
+let model_configs = models.read().iter().enumerate().map(|(i, m)| {
+    let mut config = m.config.clone();
+    if let Some(ovr) = overrides.get(&i) {
+        config.pos_x = ovr.position.x;
+    }
+    config
+}).collect::<Vec<_>>();
+```
+
+✅ Good — stable configs, no reload:
+```rust
+let model_configs = models.read().iter().map(|m| m.config.clone()).collect::<Vec<_>>();
+```
+
+The gizmo directly manipulates JS-side objects. Overrides are only for UI readout and persistence.
+
+## Interactive Rotation (Manual)
 
 ```rust
 fn app() -> Element {
@@ -66,19 +231,7 @@ fn app() -> Element {
 }
 ```
 
-## Scale
-
-Uniform scaling:
-
-```rust
-rsx! {
-    ThreeView {
-        scale: 2.0,  // Double size
-    }
-}
-```
-
-### Dynamic Scaling
+## Dynamic Scaling
 
 ```rust
 fn app() -> Element {
@@ -151,15 +304,6 @@ Dioxus Three uses a right-handed coordinate system:
 - **X+** → Right
 - **Y+** → Up  
 - **Z+** → Towards viewer (out of screen)
-
-```mermaid
-graph LR
-    subgraph "Coordinate System"
-        O[Origin] --> X[X+ Right]
-        O --> Y[Y+ Up]
-        O --> Z[Z+ Forward]
-    end
-```
 
 ## Reset Transform
 

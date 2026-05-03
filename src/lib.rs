@@ -15,6 +15,19 @@
 use dioxus::prelude::*;
 use std::collections::HashMap;
 
+// Input handling and raycasting
+pub mod gizmos;
+pub mod input;
+pub mod selection;
+
+// Re-export input types
+pub use gizmos::{Gizmo, GizmoEvent, GizmoMode, GizmoSpace, GizmoTransform};
+pub use input::{
+    Camera, CursorStyle, EntityId, GestureEvent, HitInfo, MouseButton, PointerDragEvent,
+    PointerEvent, RaycastConfig, Raycaster, Vector2, Vector3,
+};
+pub use selection::{Selection, SelectionMode, SelectionStyle};
+
 // Platform-specific modules
 #[cfg(not(target_arch = "wasm32"))]
 mod desktop;
@@ -314,6 +327,63 @@ pub struct ThreeViewProps {
     /// Shader preset or custom shader
     #[props(default = ShaderPreset::None)]
     pub shader: ShaderPreset,
+
+    // === Phase 1: Input & Selection Features ===
+    /// Unique ID for this view (needed for pointer event routing)
+    #[props(default = None)]
+    pub id: Option<String>,
+
+    /// Raycast configuration
+    #[props(default = RaycastConfig::default())]
+    pub raycast: RaycastConfig,
+
+    /// Callback for pointer down events
+    #[props(default = None)]
+    pub on_pointer_down: Option<Callback<PointerEvent>>,
+
+    /// Callback for pointer up events
+    #[props(default = None)]
+    pub on_pointer_up: Option<Callback<PointerEvent>>,
+
+    /// Callback for pointer move events (hover)
+    #[props(default = None)]
+    pub on_pointer_move: Option<Callback<PointerEvent>>,
+
+    /// Callback for pointer drag events
+    #[props(default = None)]
+    pub on_pointer_drag: Option<Callback<PointerDragEvent>>,
+
+    /// Callback for gesture events (pinch, rotate, pan)
+    #[props(default = None)]
+    pub on_gesture: Option<Callback<GestureEvent>>,
+
+    /// Current selection state
+    #[props(default = None)]
+    pub selection: Option<Selection>,
+
+    /// Selection mode
+    #[props(default = SelectionMode::Single)]
+    pub selection_mode: SelectionMode,
+
+    /// Visual style for selection
+    #[props(default = SelectionStyle::default())]
+    pub selection_style: SelectionStyle,
+
+    /// Callback when selection changes
+    #[props(default = None)]
+    pub on_selection_change: Option<Callback<Selection>>,
+
+    /// Gizmo configuration for transform manipulation
+    #[props(default = None)]
+    pub gizmo: Option<Gizmo>,
+
+    /// Callback during gizmo drag
+    #[props(default = None)]
+    pub on_gizmo_drag: Option<Callback<GizmoEvent>>,
+
+    /// Enable debug overlay
+    #[props(default = false)]
+    pub debug: bool,
 }
 
 impl ShaderPreset {
@@ -403,8 +473,8 @@ pub fn build_loader_scripts_single(format: &ModelFormat, model_url: &Option<Stri
     scripts.join("\n    ")
 }
 
-/// Build JavaScript code for loading multiple models
-pub fn build_multi_model_loading(models: &[ModelConfig], shadows: bool) -> String {
+/// Build JavaScript code for loading multiple models (interactive version with entity IDs)
+pub fn build_multi_model_loading_interactive(models: &[ModelConfig], shadows: bool) -> String {
     let shadows_str = shadows.to_string().to_lowercase();
 
     let load_calls: Vec<String> = models.iter().enumerate().map(|(idx, model)| {
@@ -423,11 +493,41 @@ pub fn build_multi_model_loading(models: &[ModelConfig], shadows: bool) -> Strin
 
         if model.format == ModelFormat::Cube {
             format!(
-                r#"(function() {{ const geometry = new THREE.BoxGeometry(1, 1, 1); const material = new THREE.MeshStandardMaterial({{ color: "{color}", roughness: 0.5, metalness: 0.3 }}); const mesh = new THREE.Mesh(geometry, material); mesh.position.set({pos_x}, {pos_y}, {pos_z}); mesh.rotation.set({rot_x}, {rot_y}, {rot_z}); mesh.scale.setScalar({scale}); mesh.castShadow = {shadows_str}; mesh.receiveShadow = {shadows_str}; modelContainer.add(mesh); }})();"#
+                r#"(function() {{ 
+                    const entityId = {idx};
+                    const geometry = new THREE.BoxGeometry(1, 1, 1); 
+                    const material = new THREE.MeshStandardMaterial({{ color: "{color}", roughness: 0.5, metalness: 0.3 }}); 
+                    const mesh = new THREE.Mesh(geometry, material); 
+                    mesh.position.set({pos_x}, {pos_y}, {pos_z}); 
+                    mesh.rotation.set({rot_x}, {rot_y}, {rot_z}); 
+                    mesh.scale.setScalar({scale}); 
+                    mesh.castShadow = {shadows_str}; 
+                    mesh.receiveShadow = {shadows_str};
+                    mesh.userData = {{ entityId: entityId }};
+                    modelContainer.add(mesh); 
+                    entityMap.set(entityId, mesh);
+                    nextEntityId = Math.max(nextEntityId, entityId + 1);
+                }})();"#
             )
         } else if is_geometry_loader {
             format!(
-                r#"(function() {{ const loader = new THREE.{loader_class}(); loader.load("{url}", function(geometry) {{ const material = new THREE.MeshStandardMaterial({{ color: "{color}", roughness: 0.5, metalness: 0.1, side: THREE.DoubleSide }}); const mesh = new THREE.Mesh(geometry, material); mesh.position.set({pos_x}, {pos_y}, {pos_z}); mesh.rotation.set({rot_x}, {rot_y}, {rot_z}); mesh.scale.setScalar({scale}); mesh.castShadow = {shadows_str}; mesh.receiveShadow = {shadows_str}; modelContainer.add(mesh); }}, undefined, function(err) {{ console.error('Failed to load model {idx}:', err); }}); }})();"#
+                r#"(function() {{ 
+                    const entityId = {idx};
+                    const loader = new THREE.{loader_class}(); 
+                    loader.load("{url}", function(geometry) {{ 
+                        const material = new THREE.MeshStandardMaterial({{ color: "{color}", roughness: 0.5, metalness: 0.1, side: THREE.DoubleSide }}); 
+                        const mesh = new THREE.Mesh(geometry, material); 
+                        mesh.position.set({pos_x}, {pos_y}, {pos_z}); 
+                        mesh.rotation.set({rot_x}, {rot_y}, {rot_z}); 
+                        mesh.scale.setScalar({scale}); 
+                        mesh.castShadow = {shadows_str}; 
+                        mesh.receiveShadow = {shadows_str};
+                        mesh.userData = {{ entityId: entityId }};
+                        modelContainer.add(mesh); 
+                        entityMap.set(entityId, mesh);
+                        nextEntityId = Math.max(nextEntityId, entityId + 1);
+                    }}, undefined, function(err) {{ console.error('Failed to load model {idx}:', err); }}); 
+                }})();"#
             )
         } else {
             let color_js = if color != default_color {
@@ -439,7 +539,28 @@ pub fn build_multi_model_loading(models: &[ModelConfig], shadows: bool) -> Strin
                 String::new()
             };
             format!(
-                r#"(function() {{ const loader = new THREE.{loader_class}(); loader.load("{url}", function(object) {{ let model = object.scene || object.dae || object; model.position.set({pos_x}, {pos_y}, {pos_z}); model.rotation.set({rot_x}, {rot_y}, {rot_z}); model.scale.setScalar({scale}); model.traverse(function(child) {{ if (child.isMesh) {{ child.castShadow = {shadows_str}; child.receiveShadow = {shadows_str}; {color_js} }} }}); modelContainer.add(model); }}, undefined, function(err) {{ console.error('Failed to load model {idx}:', err); }}); }})();"#,
+                r#"(function() {{ 
+                    const entityId = {idx};
+                    const loader = new THREE.{loader_class}(); 
+                    loader.load("{url}", function(object) {{ 
+                        let model = object.scene || object.dae || object; 
+                        model.position.set({pos_x}, {pos_y}, {pos_z}); 
+                        model.rotation.set({rot_x}, {rot_y}, {rot_z}); 
+                        model.scale.setScalar({scale}); 
+                        model.traverse(function(child) {{ 
+                            if (child.isMesh) {{ 
+                                child.castShadow = {shadows_str}; 
+                                child.receiveShadow = {shadows_str}; 
+                                child.userData = {{ entityId: entityId }};
+                                {color_js} 
+                            }} 
+                        }}); 
+                        model.userData = {{ entityId: entityId }};
+                        modelContainer.add(model); 
+                        entityMap.set(entityId, model);
+                        nextEntityId = Math.max(nextEntityId, entityId + 1);
+                    }}, undefined, function(err) {{ console.error('Failed to load model {idx}:', err); }}); 
+                }})();"#,
                 loader_class = loader_class,
                 url = url,
                 pos_x = pos_x,
@@ -459,8 +580,8 @@ pub fn build_multi_model_loading(models: &[ModelConfig], shadows: bool) -> Strin
     format!("loadingEl.style.display = 'none'; {}", load_calls.join(" "))
 }
 
-/// Build JavaScript code for loading a single model
-pub fn build_single_model_loading(
+/// Build JavaScript code for loading a single model (interactive version with entity ID)
+pub fn build_single_model_loading_interactive(
     format: &ModelFormat,
     model_url: &Option<String>,
     auto_center: bool,
@@ -476,32 +597,33 @@ pub fn build_single_model_loading(
     let shadows_str = shadows.to_string().to_lowercase();
 
     if !has_model {
-        return "const geometry = new THREE.BoxGeometry(1, 1, 1); let material = new THREE.MeshStandardMaterial({ color: state.color, roughness: 0.5, metalness: 0.3, wireframe: state.wireframe }); model = new THREE.Mesh(geometry, material); model.castShadow = true; model.receiveShadow = true; modelContainer.add(model); loadingEl.style.display = 'none';".to_string();
+        return r#"const entityId = 0; const geometry = new THREE.BoxGeometry(1, 1, 1); let material = new THREE.MeshStandardMaterial({ color: state.color, roughness: 0.5, metalness: 0.3, wireframe: state.wireframe }); model = new THREE.Mesh(geometry, material); model.castShadow = true; model.receiveShadow = true; model.userData = { entityId: entityId }; modelContainer.add(model); entityMap.set(entityId, model); nextEntityId = 1; loadingEl.style.display = 'none';"#.to_string();
     }
 
     if is_geometry_loader {
         format!(
-            r#"const loader = new THREE.{loader_class}(); loader.load("{url}", function(geometry) {{ loadingEl.style.display = 'none'; const material = new THREE.MeshStandardMaterial({{ color: state.color, roughness: 0.5, metalness: 0.1, wireframe: state.wireframe, side: THREE.DoubleSide }}); model = new THREE.Mesh(geometry, material); model.castShadow = {shadows_str}; model.receiveShadow = {shadows_str}; if ({auto_center_str}) {{ const box = new THREE.Box3().setFromObject(model); const center = box.getCenter(new THREE.Vector3()); model.position.sub(center); }} if ({auto_scale_str}) {{ const box = new THREE.Box3().setFromObject(model); const size = box.getSize(new THREE.Vector3()); const maxDim = Math.max(size.x, size.y, size.z); if (maxDim > 0) {{ const s = 2 / maxDim; model.scale.setScalar(s); }} }} modelContainer.add(model); updateTransform(); }}, function(xhr) {{ const percent = xhr.loaded / xhr.total * 100; loadingEl.textContent = 'Loading: ' + Math.round(percent) + '%'; }}, function(error) {{ console.error('Error loading model:', error); loadingEl.style.display = 'none'; errorEl.style.display = 'block'; errorEl.textContent = 'Failed to load model: ' + (error.message || 'Unknown error'); const geometry = new THREE.BoxGeometry(1, 1, 1); const material = new THREE.MeshStandardMaterial({{ color: 0xff6b6b }}); model = new THREE.Mesh(geometry, material); modelContainer.add(model); }});"#
+            r#"const entityId = 0; const loader = new THREE.{loader_class}(); loader.load("{url}", function(geometry) {{ loadingEl.style.display = 'none'; const material = new THREE.MeshStandardMaterial({{ color: state.color, roughness: 0.5, metalness: 0.1, wireframe: state.wireframe, side: THREE.DoubleSide }}); model = new THREE.Mesh(geometry, material); model.castShadow = {shadows_str}; model.receiveShadow = {shadows_str}; model.userData = {{ entityId: entityId }}; if ({auto_center_str}) {{ const box = new THREE.Box3().setFromObject(model); const center = box.getCenter(new THREE.Vector3()); model.position.sub(center); }} if ({auto_scale_str}) {{ const box = new THREE.Box3().setFromObject(model); const size = box.getSize(new THREE.Vector3()); const maxDim = Math.max(size.x, size.y, size.z); if (maxDim > 0) {{ const s = 2 / maxDim; model.scale.setScalar(s); }} }} modelContainer.add(model); entityMap.set(entityId, model); nextEntityId = 1; updateTransform(); }}, function(xhr) {{ const percent = xhr.loaded / xhr.total * 100; loadingEl.textContent = 'Loading: ' + Math.round(percent) + '%'; }}, function(error) {{ console.error('Error loading model:', error); loadingEl.style.display = 'none'; errorEl.style.display = 'block'; errorEl.textContent = 'Failed to load model: ' + (error.message || 'Unknown error'); const geometry = new THREE.BoxGeometry(1, 1, 1); const material = new THREE.MeshStandardMaterial({{ color: 0xff6b6b }}); model = new THREE.Mesh(geometry, material); model.userData = {{ entityId: entityId }}; modelContainer.add(model); entityMap.set(entityId, model); nextEntityId = 1; }});"#
         )
     } else {
         format!(
-            r#"const loader = new THREE.{loader_class}(); loader.load("{url}", function(object) {{ loadingEl.style.display = 'none'; if (object.scene) {{ model = object.scene; }} else if (object.dae) {{ model = object.scene; }} else {{ model = object; }} model.traverse(function(child) {{ if (child.isMesh) {{ child.castShadow = {shadows_str}; child.receiveShadow = {shadows_str}; if (!child.material) {{ child.material = new THREE.MeshStandardMaterial({{ color: state.color, roughness: 0.5, metalness: 0.3 }}); }} const materials = Array.isArray(child.material) ? child.material : [child.material]; materials.forEach(m => {{ if (m.opacity !== undefined && m.opacity < 0.1) m.opacity = 1.0; if (m.transparent === true && m.opacity < 0.1) m.transparent = false; if (state.color !== '#ff6b6b' && m.color) {{ m.color.set(state.color); }} m.wireframe = state.wireframe; }}); }} }}); if ({auto_center_str}) {{ const box = new THREE.Box3().setFromObject(model); const center = box.getCenter(new THREE.Vector3()); model.position.sub(center); }} if ({auto_scale_str}) {{ const box = new THREE.Box3().setFromObject(model); const size = box.getSize(new THREE.Vector3()); const maxDim = Math.max(size.x, size.y, size.z); if (maxDim > 0) {{ const s = 2 / maxDim; model.scale.setScalar(s); }} }} modelContainer.add(model); updateTransform(); }}, function(xhr) {{ const percent = xhr.loaded / xhr.total * 100; loadingEl.textContent = 'Loading: ' + Math.round(percent) + '%'; }}, function(error) {{ console.error('Error loading model:', error); loadingEl.style.display = 'none'; errorEl.style.display = 'block'; errorEl.textContent = 'Failed to load model: ' + (error.message || 'Unknown error'); const geometry = new THREE.BoxGeometry(1, 1, 1); const material = new THREE.MeshStandardMaterial({{ color: 0xff6b6b }}); model = new THREE.Mesh(geometry, material); modelContainer.add(model); }});"#
+            r#"const entityId = 0; const loader = new THREE.{loader_class}(); loader.load("{url}", function(object) {{ loadingEl.style.display = 'none'; if (object.scene) {{ model = object.scene; }} else if (object.dae) {{ model = object.scene; }} else {{ model = object; }} model.traverse(function(child) {{ if (child.isMesh) {{ child.castShadow = {shadows_str}; child.receiveShadow = {shadows_str}; child.userData = {{ entityId: entityId }}; if (!child.material) {{ child.material = new THREE.MeshStandardMaterial({{ color: state.color, roughness: 0.5, metalness: 0.3 }}); }} const materials = Array.isArray(child.material) ? child.material : [child.material]; materials.forEach(m => {{ if (m.opacity !== undefined && m.opacity < 0.1) m.opacity = 1.0; if (m.transparent === true && m.opacity < 0.1) m.transparent = false; if (state.color !== '#ff6b6b' && m.color) {{ m.color.set(state.color); }} m.wireframe = state.wireframe; }}); }} }}); model.userData = {{ entityId: entityId }}; if ({auto_center_str}) {{ const box = new THREE.Box3().setFromObject(model); const center = box.getCenter(new THREE.Vector3()); model.position.sub(center); }} if ({auto_scale_str}) {{ const box = new THREE.Box3().setFromObject(model); const size = box.getSize(new THREE.Vector3()); const maxDim = Math.max(size.x, size.y, size.z); if (maxDim > 0) {{ const s = 2 / maxDim; model.scale.setScalar(s); }} }} modelContainer.add(model); entityMap.set(entityId, model); nextEntityId = 1; updateTransform(); }}, function(xhr) {{ const percent = xhr.loaded / xhr.total * 100; loadingEl.textContent = 'Loading: ' + Math.round(percent) + '%'; }}, function(error) {{ console.error('Error loading model:', error); loadingEl.style.display = 'none'; errorEl.style.display = 'block'; errorEl.textContent = 'Failed to load model: ' + (error.message || 'Unknown error'); const geometry = new THREE.BoxGeometry(1, 1, 1); const material = new THREE.MeshStandardMaterial({{ color: 0xff6b6b }}); model = new THREE.Mesh(geometry, material); model.userData = {{ entityId: entityId }}; modelContainer.add(model); entityMap.set(entityId, model); nextEntityId = 1; }});"#
         )
     }
 }
 
 /// Generate the HTML with embedded Three.js
+/// Includes full raycasting, selection, and gizmo interaction support
 pub fn generate_three_js_html(props: &ThreeViewProps) -> String {
     let rot_x_rad = props.rot_x.to_radians();
     let rot_y_rad = props.rot_y.to_radians();
     let rot_z_rad = props.rot_z.to_radians();
 
     // Legacy single-model variables (for backward compatibility with template)
-    let loader_url = props.format.loader_url();
-    let loader_class = props.format.loader_js();
+    let _loader_url = props.format.loader_url();
+    let _loader_class = props.format.loader_js();
     let format_str = props.format.as_str();
     let model_url = props.model_url.clone().unwrap_or_default();
-    let has_model = !model_url.is_empty() && props.format != ModelFormat::Cube;
+    let _has_model = !model_url.is_empty() && props.format != ModelFormat::Cube;
 
     // Check if using multiple models
     let use_multiple_models = !props.models.is_empty();
@@ -515,9 +637,9 @@ pub fn generate_three_js_html(props: &ThreeViewProps) -> String {
 
     // Build model loading JavaScript code
     let model_loading_code = if use_multiple_models {
-        build_multi_model_loading(&props.models, props.shadows)
+        build_multi_model_loading_interactive(&props.models, props.shadows)
     } else {
-        build_single_model_loading(
+        build_single_model_loading_interactive(
             &props.format,
             &props.model_url,
             props.auto_center,
@@ -527,10 +649,45 @@ pub fn generate_three_js_html(props: &ThreeViewProps) -> String {
     };
 
     // Build shader code if needed
-    let (shader_material_code, shader_uniforms, _shader_animated) =
+    let (_shader_material_code, shader_uniforms, _shader_animated) =
         build_shader_code(&props.shader);
 
-    // Build the HTML
+    // Serialize selection and gizmo state for JavaScript
+    let selection_ids_json = props
+        .selection
+        .as_ref()
+        .map(|s| {
+            let ids: Vec<String> = s.iter().map(|e| e.0.to_string()).collect();
+            format!("[{}]", ids.join(", "))
+        })
+        .unwrap_or_else(|| "[]".to_string());
+
+    let gizmo_config_json = props
+        .gizmo
+        .as_ref()
+        .map(|g| {
+            format!(
+                r#"{{"target": {}, "mode": "{:?}", "space": "{:?}"}}"#,
+                g.target.0, g.mode, g.space
+            )
+        })
+        .unwrap_or_else(|| "null".to_string());
+
+    let selection_style_json = format!(
+        r#"{{"outline": {}, "outline_color": "{}", "outline_width": {}, "highlight": {}, "highlight_color": "{}", "highlight_opacity": {}, "show_gizmo": {}}}"#,
+        props.selection_style.outline.to_string().to_lowercase(),
+        props.selection_style.outline_color,
+        props.selection_style.outline_width,
+        props.selection_style.highlight.to_string().to_lowercase(),
+        props.selection_style.highlight_color,
+        props.selection_style.highlight_opacity,
+        props.selection_style.show_gizmo.to_string().to_lowercase(),
+    );
+
+    let raycast_enabled = props.raycast.enabled;
+    let selection_enabled = props.selection.is_some();
+
+    // Build the HTML with full interaction support
     let html = format!(
         r##"<!DOCTYPE html>
 <html>
@@ -561,6 +718,15 @@ pub fn generate_three_js_html(props: &ThreeViewProps) -> String {
             text-align: center;
             display: none;
         }}
+        canvas {{
+            cursor: default;
+        }}
+        canvas.hovering {{
+            cursor: pointer;
+        }}
+        canvas.dragging {{
+            cursor: grabbing;
+        }}
     </style>
 </head>
 <body>
@@ -568,6 +734,7 @@ pub fn generate_three_js_html(props: &ThreeViewProps) -> String {
     <div id="loading">Loading 3D model...</div>
     <div id="error"></div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
     {loader_script}
     <script>
         console.log("Dioxus Three: Initializing ({fmt})...");
@@ -627,6 +794,35 @@ pub fn generate_three_js_html(props: &ThreeViewProps) -> String {
         let modelContainer = new THREE.Group();
         scene.add(modelContainer);
         
+        // ============ INTERACTIVE SYSTEMS ============
+        
+        // Entity management
+        const entityMap = new Map(); // entityId -> object
+        let nextEntityId = 0;
+        
+        // Selection system
+        let selectedEntities = new Set({selection_ids_json});
+        let selectionOutlines = new Map(); // entityId -> outline mesh
+        let outlineToMeshMap = new Map(); // outline group -> source mesh
+        
+        // Gizmo system
+        let transformControl = null;
+        let gizmoTarget = null;
+        let currentGizmoMode = 'translate';
+        let currentGizmoSpace = 'world';
+        
+        // Raycasting system
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        let isDragging = false;
+        let isGizmoDragging = false;
+        
+        const raycastEnabled = {raycast_enabled};
+        const selectionEnabled = {selection_enabled};
+        
+        // State
+        let selectionStyle = {selection_style_json};
+        
         let state = {{
             rotX: {rot_x},
             rotY: {rot_y},
@@ -639,9 +835,512 @@ pub fn generate_three_js_html(props: &ThreeViewProps) -> String {
         }};
         let autoRotY = 0;
         
+        // Initialize TransformControls
+        function initTransformControls() {{
+            if (typeof THREE.TransformControls === 'undefined') {{
+                console.warn('TransformControls not available');
+                return null;
+            }}
+            const control = new THREE.TransformControls(camera, renderer.domElement);
+            
+            // Ensure gizmo handles render on top of everything (including scaled objects)
+            function fixGizmoDepth(gizmo) {{
+                gizmo.traverse(function(child) {{
+                    if (child.material) {{
+                        if (Array.isArray(child.material)) {{
+                            child.material.forEach(function(m) {{
+                                m.depthTest = false;
+                                m.depthWrite = false;
+                            }});
+                        }} else {{
+                            child.material.depthTest = false;
+                            child.material.depthWrite = false;
+                        }}
+                    }}
+                    child.renderOrder = 999;
+                }});
+            }}
+            control.addEventListener('dragging-changed', function(event) {{
+                isGizmoDragging = event.value;
+                console.log('[GIZMO] dragging-changed:', event.value, 'attached to:', gizmoTarget);
+                if (event.value) {{
+                    renderer.domElement.classList.add('dragging');
+                }} else {{
+                    renderer.domElement.classList.remove('dragging');
+                }}
+            }});
+            control.addEventListener('change', function() {{
+                if (gizmoTarget && control.object) {{
+                    console.log('[GIZMO] change event - target:', gizmoTarget, 'scale:', control.object.scale.x.toFixed(3), control.object.scale.y.toFixed(3), control.object.scale.z.toFixed(3));
+                    // Notify parent about transform change
+                    notifyGizmoDrag(gizmoTarget, control.object, false);
+                }}
+            }});
+            control.addEventListener('mouseUp', function() {{
+                if (gizmoTarget && control.object) {{
+                    notifyGizmoDrag(gizmoTarget, control.object, true);
+                }}
+            }});
+            scene.add(control);
+            return control;
+        }}
+        
+        // Create selection outline for an object
+        function createSelectionOutline(object, entityId) {{
+            // Remove existing outline
+            removeSelectionOutline(entityId);
+            
+            const outlineColorHex = selectionStyle.outline_color || '#FFD700';
+            const outlineColor = new THREE.Color(outlineColorHex).getHex();
+            
+            const box = new THREE.Box3().setFromObject(object);
+            const size = box.getSize(new THREE.Vector3());
+            const center = box.getCenter(new THREE.Vector3());
+            const maxDim = Math.max(size.x, size.y, size.z);
+            
+            // Create a group for the outline
+            const outlineGroup = new THREE.Group();
+            
+            // Main wireframe box - thicker and more visible
+            const outlineGeometry = new THREE.BoxGeometry(size.x * 1.08, size.y * 1.08, size.z * 1.08);
+            const outlineMaterial = new THREE.MeshBasicMaterial({{
+                color: outlineColor,
+                wireframe: true,
+                transparent: true,
+                opacity: 1.0
+            }});
+            const outline = new THREE.Mesh(outlineGeometry, outlineMaterial);
+            outlineGroup.add(outline);
+            
+            // Inner glow effect - semi-transparent fill
+            const glowGeometry = new THREE.BoxGeometry(size.x * 1.04, size.y * 1.04, size.z * 1.04);
+            const glowMaterial = new THREE.MeshBasicMaterial({{
+                color: outlineColor,
+                transparent: true,
+                opacity: 0.15,
+                side: THREE.BackSide
+            }});
+            const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+            outlineGroup.add(glow);
+            
+            // Store original size for scale tracking
+            outlineGroup.userData = {{ originalSize: size.clone() }};
+            
+            // Position the outline group
+            outlineGroup.position.copy(center);
+            
+            // If object is a mesh, match its world transform
+            if (object.parent) {{
+                object.parent.add(outlineGroup);
+            }} else {{
+                scene.add(outlineGroup);
+            }}
+            
+            selectionOutlines.set(entityId, outlineGroup);
+            outlineToMeshMap.set(outlineGroup, object);
+        }}
+        
+        // Remove selection outline
+        function removeSelectionOutline(entityId) {{
+            const outline = selectionOutlines.get(entityId);
+            if (outline) {{
+                if (outline.parent) outline.parent.remove(outline);
+                outline.traverse(function(child) {{
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material) {{
+                        if (Array.isArray(child.material)) {{
+                            child.material.forEach(m => m.dispose());
+                        }} else {{
+                            child.material.dispose();
+                        }}
+                    }}
+                }});
+                selectionOutlines.delete(entityId);
+            }}
+        }}
+        
+        // Update all selection visualizations
+        function updateSelectionVisuals() {{
+            // Clear all outlines
+            for (const [entityId, outline] of selectionOutlines) {{
+                if (outline.parent) outline.parent.remove(outline);
+                outline.traverse(function(child) {{
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material) {{
+                        if (Array.isArray(child.material)) {{
+                            child.material.forEach(m => m.dispose());
+                        }} else {{
+                            child.material.dispose();
+                        }}
+                    }}
+                }});
+            }}
+            selectionOutlines.clear();
+            outlineToMeshMap.clear();
+            
+            // Create outlines for selected entities
+            for (const entityId of selectedEntities) {{
+                const obj = entityMap.get(entityId);
+                if (obj) {{
+                    createSelectionOutline(obj, entityId);
+                }}
+            }}
+        }}
+        
+        // Update gizmo position and mode
+        function updateGizmo(gizmoConfig) {{
+            if (!gizmoConfig) gizmoConfig = {gizmo_config_json};
+            if (!gizmoConfig || !transformControl) {{
+                if (transformControl) transformControl.detach();
+                gizmoTarget = null;
+                return;
+            }}
+            
+            const targetObj = entityMap.get(gizmoConfig.target);
+            if (!targetObj) return;
+            
+            // Set mode
+            const mode = gizmoConfig.mode.toLowerCase();
+            if (mode !== currentGizmoMode) {{
+                currentGizmoMode = mode;
+                transformControl.setMode(mode === 'translate' ? 'translate' : mode === 'rotate' ? 'rotate' : 'scale');
+            }}
+            
+            // Set space
+            const space = gizmoConfig.space.toLowerCase();
+            if (space !== currentGizmoSpace) {{
+                currentGizmoSpace = space;
+                transformControl.setSpace(space === 'local' ? 'local' : 'world');
+            }}
+            
+            // Attach to target
+            if (gizmoTarget !== gizmoConfig.target) {{
+                gizmoTarget = gizmoConfig.target;
+                transformControl.attach(targetObj);
+            }}
+            
+            // Ensure gizmo handles always render on top of the object
+            if (transformControl) {{
+                transformControl.traverse(function(child) {{
+                    if (child.material) {{
+                        if (Array.isArray(child.material)) {{
+                            child.material.forEach(function(m) {{
+                                m.depthTest = false;
+                                m.depthWrite = false;
+                            }});
+                        }} else {{
+                            child.material.depthTest = false;
+                            child.material.depthWrite = false;
+                        }}
+                    }}
+                    child.renderOrder = 999;
+                }});
+            }}
+        }}
+        
+        // Notify parent window about gizmo drag
+        function notifyGizmoDrag(entityId, object, isFinished) {{
+            const eventData = {{
+                target: entityId,
+                mode: currentGizmoMode,
+                space: currentGizmoSpace,
+                transform: {{
+                    position: {{
+                        x: object.position.x,
+                        y: object.position.y,
+                        z: object.position.z
+                    }},
+                    rotation: {{
+                        x: object.rotation.x,
+                        y: object.rotation.y,
+                        z: object.rotation.z
+                    }},
+                    scale: {{
+                        x: object.scale.x,
+                        y: object.scale.y,
+                        z: object.scale.z
+                    }}
+                }},
+                isFinished: !!isFinished
+            }};
+            
+            console.log('[GIZMO] notifyGizmoDrag - entity:', entityId, 'finished:', isFinished, 'scale:', object.scale.x.toFixed(3), object.scale.y.toFixed(3), object.scale.z.toFixed(3));
+            
+            // Send message to parent window
+            if (window.parent !== window) {{
+                window.parent.postMessage({{
+                    type: 'gizmo-drag',
+                    data: eventData
+                }}, '*');
+            }}
+        }}
+        
+        // Notify parent about pointer event
+        function notifyPointerEvent(type, event, hit) {{
+            const eventData = {{
+                hit: hit,
+                screenPosition: {{ x: event.clientX, y: event.clientY }},
+                ndcPosition: {{ x: mouse.x, y: mouse.y }},
+                button: event.button === 0 ? 'Left' : event.button === 2 ? 'Right' : 'Middle',
+                shiftKey: event.shiftKey,
+                ctrlKey: event.ctrlKey,
+                altKey: event.altKey
+            }};
+            
+            if (window.parent !== window) {{
+                window.parent.postMessage({{
+                    type: type,
+                    data: eventData
+                }}, '*');
+            }}
+        }}
+        
+        // Raycast to find intersected entity
+        function raycastEntity(clientX, clientY) {{
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+            
+            raycaster.setFromCamera(mouse, camera);
+            
+            // Collect all selectable objects
+            const selectableObjects = [];
+            for (const [entityId, obj] of entityMap) {{
+                if (obj) selectableObjects.push(obj);
+            }}
+            
+            console.log('[RAYCAST] checking', selectableObjects.length, 'objects, mouse:', mouse.x.toFixed(3), mouse.y.toFixed(3));
+            
+            const intersects = raycaster.intersectObjects(selectableObjects, true);
+            console.log('[RAYCAST] intersects:', intersects.length);
+            if (intersects.length > 0) {{
+                // Find the entity ID for this intersection
+                let targetObj = intersects[0].object;
+                let entityId = null;
+                
+                // Traverse up to find entity with userData
+                while (targetObj) {{
+                    for (const [id, obj] of entityMap) {{
+                        if (obj === targetObj || isDescendant(obj, targetObj)) {{
+                            entityId = id;
+                            break;
+                        }}
+                    }}
+                    if (entityId !== null) break;
+                    targetObj = targetObj.parent;
+                }}
+                
+                if (entityId !== null) {{
+                    return {{
+                        entityId: entityId,
+                        point: intersects[0].point,
+                        normal: intersects[0].face ? intersects[0].face.normal : new THREE.Vector3(0, 1, 0),
+                        distance: intersects[0].distance
+                    }};
+                }}
+            }}
+            return null;
+        }}
+        
+        // Check if target is descendant of parent
+        function isDescendant(parent, target) {{
+            if (!parent || !target) return false;
+            let found = false;
+            parent.traverse(function(child) {{
+                if (child === target) found = true;
+            }});
+            return found;
+        }}
+        
+        // Check if clicking on TransformControls gizmo
+        function isClickOnGizmo(event) {{
+            if (!transformControl || !transformControl.object) return false;
+            
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+            
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(transformControl.children, true);
+            
+            for (let i = 0; i < intersects.length; i++) {{
+                // Only count clicks on actual interactive handles (Mesh), not lines
+                if (intersects[i].object.visible && intersects[i].object.isMesh) {{
+                    console.log('[GIZMO] Clicked on handle:', intersects[i].object.type, intersects[i].object.name || '');
+                    return true;
+                }}
+            }}
+            if (intersects.length > 0) {{
+                console.log('[GIZMO] Clicked on non-handle:', intersects.map(i => ({{ type: i.object.type, visible: i.object.visible, isMesh: i.object.isMesh }})));
+            }}
+            return false;
+        }}
+        
+        // Pointer event handlers
+        function onPointerDown(event) {{
+            if (!raycastEnabled) {{
+                console.log('[POINTER] raycast disabled');
+                return;
+            }}
+            
+            // Don't process if clicking on gizmo
+            if (transformControl && transformControl.dragging) {{
+                console.log('[POINTER] gizmo is dragging, skipping');
+                return;
+            }}
+            
+            // Check if clicking on gizmo handle - let TransformControls handle it
+            if (isClickOnGizmo(event)) {{
+                console.log('[POINTER] click on gizmo, skipping');
+                return;
+            }}
+            
+            isDragging = false;
+            const hit = raycastEntity(event.clientX, event.clientY);
+            console.log('[POINTER] down at', event.clientX, event.clientY, 'hit:', hit);
+            
+            // Handle selection within the iframe
+            if (selectionEnabled && hit) {{
+                if (event.shiftKey) {{
+                    if (selectedEntities.has(hit.entityId)) {{
+                        selectedEntities.delete(hit.entityId);
+                    }} else {{
+                        selectedEntities.add(hit.entityId);
+                    }}
+                }} else {{
+                    selectedEntities.clear();
+                    selectedEntities.add(hit.entityId);
+                }}
+                updateSelectionVisuals();
+                updateGizmo();
+                
+                // Notify parent about selection change
+                if (window.parent !== window) {{
+                    window.parent.postMessage({{
+                        type: 'selection-change',
+                        selection: Array.from(selectedEntities)
+                    }}, '*');
+                }}
+            }} else if (selectionEnabled && !event.shiftKey) {{
+                selectedEntities.clear();
+                updateSelectionVisuals();
+                updateGizmo();
+                
+                if (window.parent !== window) {{
+                    window.parent.postMessage({{
+                        type: 'selection-change',
+                        selection: Array.from(selectedEntities)
+                    }}, '*');
+                }}
+            }}
+            
+            notifyPointerEvent('pointer-down', event, hit);
+        }}
+        
+        function onPointerMove(event) {{
+            if (!raycastEnabled) return;
+            
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+            
+            raycaster.setFromCamera(mouse, camera);
+            
+            // Check for hover
+            const selectableObjects = [];
+            for (const [entityId, obj] of entityMap) {{
+                if (obj) selectableObjects.push(obj);
+            }}
+            
+            const intersects = raycaster.intersectObjects(selectableObjects, true);
+            if (intersects.length > 0 && !isGizmoDragging) {{
+                renderer.domElement.classList.add('hovering');
+            }} else {{
+                renderer.domElement.classList.remove('hovering');
+            }}
+            
+            if (event.buttons > 0) {{
+                isDragging = true;
+            }}
+        }}
+        
+        function onPointerUp(event) {{
+            if (!raycastEnabled) return;
+            notifyPointerEvent('pointer-up', event, null);
+        }}
+        
+        // Add event listeners
+        renderer.domElement.addEventListener('pointerdown', onPointerDown);
+        renderer.domElement.addEventListener('pointermove', onPointerMove);
+        renderer.domElement.addEventListener('pointerup', onPointerUp);
+        renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
+        
+        // Listen for messages from parent
+        window.addEventListener('message', function(event) {{
+            if (event.data && event.data.type === 'update-selection') {{
+                selectedEntities = new Set(event.data.selection);
+                updateSelectionVisuals();
+                updateGizmo();
+            }} else if (event.data && event.data.type === 'update-gizmo') {{
+                updateGizmo();
+            }} else if (event.data && event.data.type === 'update-selection-style') {{
+                selectionStyle = {{ ...selectionStyle, ...event.data.style }};
+                updateSelectionVisuals();
+            }} else if (event.data && event.data.type === 'update-state') {{
+                const data = event.data;
+                
+                // Camera
+                if (data.camX !== undefined) {{
+                    state.camX = data.camX;
+                    state.camY = data.camY;
+                    state.camZ = data.camZ;
+                    camera.position.set(state.camX, state.camY, state.camZ);
+                }}
+                if (data.targetX !== undefined) {{
+                    state.targetX = data.targetX;
+                    state.targetY = data.targetY;
+                    state.targetZ = data.targetZ;
+                    camera.lookAt(state.targetX, state.targetY, state.targetZ);
+                }}
+                
+                // Scene settings
+                if (data.autoRotate !== undefined) state.autoRotate = data.autoRotate;
+                if (data.rotSpeed !== undefined) state.rotSpeed = data.rotSpeed;
+                if (data.scale !== undefined) state.scale = data.scale;
+                if (data.color !== undefined) state.color = data.color;
+                if (data.background !== undefined) {{
+                    state.background = data.background;
+                    scene.background = new THREE.Color(state.background);
+                }}
+                if (data.showGrid !== undefined) state.showGrid = data.showGrid;
+                if (data.showAxes !== undefined) state.showAxes = data.showAxes;
+                if (data.wireframe !== undefined) state.wireframe = data.wireframe;
+                
+                updateTransform();
+                
+                if (data.selection !== undefined) {{
+                    selectedEntities = new Set(data.selection);
+                    updateSelectionVisuals();
+                }}
+                if (data.gizmo !== undefined) {{
+                    updateGizmo(data.gizmo);
+                }}
+                // NOTE: We intentionally do NOT update models via postMessage
+                // because TransformControls handles transforms directly in the iframe.
+                // Sending model transforms would create a race condition where
+                // updateModels resets the object while the user is dragging.
+                // Model changes (add/remove) are handled by iframe reload instead.
+            }}
+        }});
+        
         async function loadModel() {{
             try {{
                 {model_loading_code}
+                
+                // Initialize after models are loaded
+                transformControl = initTransformControls();
+                updateSelectionVisuals();
+                updateGizmo();
             }} catch (e) {{
                 console.error('Error:', e);
                 loadingEl.style.display = 'none';
@@ -667,11 +1366,89 @@ pub fn generate_three_js_html(props: &ThreeViewProps) -> String {
             }});
         }}
         
+        // Update model transforms without full reload
+        function updateModels(modelsData) {{
+            if (!modelsData || !Array.isArray(modelsData)) return;
+            
+            const seenIds = new Set();
+            
+            for (const model of modelsData) {{
+                const entityId = model.entityId;
+                seenIds.add(entityId);
+                
+                let obj = entityMap.get(entityId);
+                if (!obj) {{
+                    // Create new cube for missing objects
+                    if (model.format === 'cube') {{
+                        const geometry = new THREE.BoxGeometry(1, 1, 1);
+                        const material = new THREE.MeshStandardMaterial({{ 
+                            color: model.color || '#ffffff',
+                            roughness: 0.5, 
+                            metalness: 0.3 
+                        }});
+                        obj = new THREE.Mesh(geometry, material);
+                        obj.castShadow = true;
+                        obj.receiveShadow = true;
+                    }} else {{
+                        continue;
+                    }}
+                    obj.userData = {{ entityId: entityId }};
+                    modelContainer.add(obj);
+                    entityMap.set(entityId, obj);
+                }}
+                
+                if (obj) {{
+                    obj.position.set(model.posX || 0, model.posY || 0, model.posZ || 0);
+                    obj.rotation.set(
+                        (model.rotX || 0) * Math.PI / 180,
+                        (model.rotY || 0) * Math.PI / 180,
+                        (model.rotZ || 0) * Math.PI / 180
+                    );
+                    obj.scale.setScalar(model.scale !== undefined ? model.scale : 1);
+                    
+                    if (obj.material && obj.material.color && model.color) {{
+                        obj.material.color.set(model.color);
+                    }}
+                }}
+            }}
+            
+            // Remove deleted models
+            for (const [id, obj] of entityMap) {{
+                if (!seenIds.has(id)) {{
+                    if (obj.parent) obj.parent.remove(obj);
+                    if (obj.geometry) obj.geometry.dispose();
+                    if (obj.material) {{
+                        if (Array.isArray(obj.material)) {{
+                            obj.material.forEach(m => m.dispose());
+                        }} else {{
+                            obj.material.dispose();
+                        }}
+                    }}
+                    entityMap.delete(id);
+                }}
+            }}
+            
+            updateSelectionVisuals();
+            updateGizmo();
+        }}
+        
         window.updateThreeView = function(params) {{
             state = {{ ...state, ...params }};
             if (params.camX !== undefined) camera.position.set(state.camX, state.camY, state.camZ);
             if (params.targetX !== undefined) camera.lookAt(state.targetX, state.targetY, state.targetZ);
+            if (params.background !== undefined) scene.background = new THREE.Color(state.background);
             updateTransform();
+        }};
+        
+        // Expose functions for external control
+        window.setSelection = function(selection) {{
+            selectedEntities = new Set(selection);
+            updateSelectionVisuals();
+            updateGizmo();
+        }};
+        
+        window.setGizmoConfig = function(config) {{
+            updateGizmo();
         }};
         
         function animate() {{
@@ -680,6 +1457,29 @@ pub fn generate_three_js_html(props: &ThreeViewProps) -> String {
                 autoRotY += state.rotSpeed * 0.01;
                 modelContainer.rotation.y = state.rotY + autoRotY;
             }}
+            
+            // Update selection outlines to track their source meshes
+            for (const [outlineGroup, sourceMesh] of outlineToMeshMap) {{
+                if (sourceMesh.parent) {{
+                    const box = new THREE.Box3().setFromObject(sourceMesh);
+                    const center = box.getCenter(new THREE.Vector3());
+                    const currentSize = box.getSize(new THREE.Vector3());
+                    const originalSize = outlineGroup.userData.originalSize;
+                    
+                    outlineGroup.position.copy(center);
+                    outlineGroup.rotation.copy(sourceMesh.rotation);
+                    
+                    // Scale outline to match object's current bounding box
+                    if (originalSize && originalSize.x > 0 && originalSize.y > 0 && originalSize.z > 0) {{
+                        outlineGroup.scale.set(
+                            currentSize.x / originalSize.x,
+                            currentSize.y / originalSize.y,
+                            currentSize.z / originalSize.z
+                        );
+                    }}
+                }}
+            }}
+            
             {shader_uniforms}
             renderer.render(scene, camera);
         }}
@@ -695,7 +1495,7 @@ pub fn generate_three_js_html(props: &ThreeViewProps) -> String {
         loadModel();
         updateTransform();
         animate();
-        console.log("Dioxus Three: Running");
+        console.log("Dioxus Three: Running with interaction support");
     </script>
 </body>
 </html>"##,
@@ -724,6 +1524,11 @@ pub fn generate_three_js_html(props: &ThreeViewProps) -> String {
         pos_z = props.pos_z,
         shader_uniforms = shader_uniforms,
         model_loading_code = model_loading_code,
+        selection_ids_json = selection_ids_json,
+        gizmo_config_json = gizmo_config_json,
+        selection_style_json = selection_style_json,
+        raycast_enabled = raycast_enabled.to_string().to_lowercase(),
+        selection_enabled = selection_enabled.to_string().to_lowercase(),
     );
 
     html
@@ -769,4 +1574,26 @@ pub fn build_shader_code(shader: &ShaderPreset) -> (String, String, bool) {
             (material_code, uniforms_code, animated)
         }
     }
+}
+
+/// Serialize model configs to JSON for postMessage updates (desktop iframe)
+pub fn models_to_json(models: &[ModelConfig]) -> String {
+    let mut parts = Vec::new();
+    for (idx, model) in models.iter().enumerate() {
+        parts.push(format!(
+            r#"{{"entityId":{},"url":"{}","format":"{}","posX":{},"posY":{},"posZ":{},"rotX":{},"rotY":{},"rotZ":{},"scale":{},"color":"{}"}}"#,
+            idx,
+            model.url.replace('\\', "\\\\").replace('"', "\\\""),
+            model.format.as_str(),
+            model.pos_x,
+            model.pos_y,
+            model.pos_z,
+            model.rot_x,
+            model.rot_y,
+            model.rot_z,
+            model.scale,
+            model.color.replace('\\', "\\\\").replace('"', "\\\"")
+        ));
+    }
+    format!("[{}]", parts.join(","))
 }

@@ -7,11 +7,14 @@ authors = ["Esteban Puello <eftech93@gmail.com>"]
 description = "A Three.js 3D model viewer for Dioxus - supports Desktop, Web (WASM), and Mobile"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/eftech93/dioxus-three"
-keywords = ["dioxus", "threejs", "3d", "graphics", "component"]
-categories = ["gui", "graphics", "rendering"]
+homepage = "https://github.com/eftech93/dioxus-three"
+documentation = "https://docs.rs/dioxus-three"
+keywords = ["dioxus", "rust", "3d", "threejs", "gltf", "wasm", "webgl", "model-viewer"]
+categories = ["gui", "graphics", "rendering", "wasm"]
 
 [dependencies]
 dioxus = "0.6"
+serde_json = "1.0"
 rand = { version = "0.8", optional = true }
 
 # Desktop-specific dependencies - none needed beyond dioxus
