@@ -2,9 +2,9 @@
 //!
 //! Enhanced with Phase 1 features: Raycasting, Selection, and Transform Gizmos
 
-use crate::ThreeViewProps;
-use crate::input::{PointerEvent, PointerDragEvent, HitInfo, Vector2, Vector3, MouseButton};
+use crate::input::{HitInfo, MouseButton, PointerDragEvent, PointerEvent, Vector2, Vector3};
 use crate::EntityId;
+use crate::ThreeViewProps;
 use dioxus::prelude::*;
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::JsCast;
@@ -50,17 +50,19 @@ fn register_callbacks(
 ) {
     CALLBACK_STORAGE.with(|storage| {
         let mut storage = storage.borrow_mut();
-        let callbacks = storage.entry(canvas_id.clone()).or_insert_with(CallbackStorage::new);
+        let callbacks = storage
+            .entry(canvas_id.clone())
+            .or_insert_with(CallbackStorage::new);
         callbacks.on_pointer_down = on_pointer_down;
         callbacks.on_pointer_up = on_pointer_up;
         callbacks.on_pointer_move = on_pointer_move;
         callbacks.on_pointer_drag = on_pointer_drag;
         callbacks.on_gizmo_drag = on_gizmo_drag;
     });
-    
+
     // Set up JavaScript bridge
     setup_js_bridge();
-    
+
     let js_code = r#"
         (function() {
             if (!window.dioxusThreeBridge) {
@@ -94,7 +96,7 @@ fn register_callbacks(
             }
         })();
     "#;
-    
+
     let _ = js_sys::eval(js_code);
 }
 
@@ -105,42 +107,62 @@ fn setup_js_bridge() {
             invoke_pointer_down(&id, &json);
         }
     }) as Box<dyn FnMut(JsValue, JsValue)>);
-    
+
     let on_pointer_up = Closure::wrap(Box::new(|canvas_id: JsValue, event_json: JsValue| {
         if let (Some(id), Some(json)) = (canvas_id.as_string(), event_json.as_string()) {
             invoke_pointer_up(&id, &json);
         }
     }) as Box<dyn FnMut(JsValue, JsValue)>);
-    
+
     let on_pointer_move = Closure::wrap(Box::new(|canvas_id: JsValue, event_json: JsValue| {
         if let (Some(id), Some(json)) = (canvas_id.as_string(), event_json.as_string()) {
             invoke_pointer_move(&id, &json);
         }
     }) as Box<dyn FnMut(JsValue, JsValue)>);
-    
+
     let on_pointer_drag = Closure::wrap(Box::new(|canvas_id: JsValue, event_json: JsValue| {
         if let (Some(id), Some(json)) = (canvas_id.as_string(), event_json.as_string()) {
             invoke_pointer_drag(&id, &json);
         }
     }) as Box<dyn FnMut(JsValue, JsValue)>);
-    
+
     let on_gizmo_drag = Closure::wrap(Box::new(|canvas_id: JsValue, event_json: JsValue| {
         if let (Some(id), Some(json)) = (canvas_id.as_string(), event_json.as_string()) {
             invoke_gizmo_drag(&id, &json);
         }
     }) as Box<dyn FnMut(JsValue, JsValue)>);
-    
+
     let bridge = js_sys::Object::new();
-    let _ = js_sys::Reflect::set(&bridge, &"on_pointer_down".into(), on_pointer_down.as_ref().unchecked_ref());
-    let _ = js_sys::Reflect::set(&bridge, &"on_pointer_up".into(), on_pointer_up.as_ref().unchecked_ref());
-    let _ = js_sys::Reflect::set(&bridge, &"on_pointer_move".into(), on_pointer_move.as_ref().unchecked_ref());
-    let _ = js_sys::Reflect::set(&bridge, &"on_pointer_drag".into(), on_pointer_drag.as_ref().unchecked_ref());
-    let _ = js_sys::Reflect::set(&bridge, &"on_gizmo_drag".into(), on_gizmo_drag.as_ref().unchecked_ref());
-    
+    let _ = js_sys::Reflect::set(
+        &bridge,
+        &"on_pointer_down".into(),
+        on_pointer_down.as_ref().unchecked_ref(),
+    );
+    let _ = js_sys::Reflect::set(
+        &bridge,
+        &"on_pointer_up".into(),
+        on_pointer_up.as_ref().unchecked_ref(),
+    );
+    let _ = js_sys::Reflect::set(
+        &bridge,
+        &"on_pointer_move".into(),
+        on_pointer_move.as_ref().unchecked_ref(),
+    );
+    let _ = js_sys::Reflect::set(
+        &bridge,
+        &"on_pointer_drag".into(),
+        on_pointer_drag.as_ref().unchecked_ref(),
+    );
+    let _ = js_sys::Reflect::set(
+        &bridge,
+        &"on_gizmo_drag".into(),
+        on_gizmo_drag.as_ref().unchecked_ref(),
+    );
+
     if let Some(window) = web_sys::window() {
         let _ = js_sys::Reflect::set(&window, &"dioxusThreeRustBridge".into(), &bridge);
     }
-    
+
     on_pointer_down.forget();
     on_pointer_up.forget();
     on_pointer_move.forget();
@@ -246,9 +268,15 @@ fn parse_hit_info(json_val: &js_sys::Object) -> Option<HitInfo> {
     let normal = get_vec3_from_js(hit_obj, "normal")?;
     let uv = get_vec2_from_js(hit_obj, "uv");
     let distance = get_f32_from_js(hit_obj, "distance")?;
-    let face_index = js_sys::Reflect::get(hit_obj, &"faceIndex".into()).ok().and_then(|v| v.as_f64()).map(|v| v as usize);
-    let instance_id = js_sys::Reflect::get(hit_obj, &"instanceId".into()).ok().and_then(|v| v.as_f64()).map(|v| v as usize);
-    
+    let face_index = js_sys::Reflect::get(hit_obj, &"faceIndex".into())
+        .ok()
+        .and_then(|v| v.as_f64())
+        .map(|v| v as usize);
+    let instance_id = js_sys::Reflect::get(hit_obj, &"instanceId".into())
+        .ok()
+        .and_then(|v| v.as_f64())
+        .map(|v| v as usize);
+
     Some(HitInfo {
         entity_id: EntityId(entity_id),
         point,
@@ -264,10 +292,11 @@ fn parse_hit_info(json_val: &js_sys::Object) -> Option<HitInfo> {
 fn parse_pointer_event(json: &str) -> Option<PointerEvent> {
     let json_val = js_sys::JSON::parse(json).ok()?;
     let json_obj = json_val.dyn_ref::<js_sys::Object>()?;
-    
+
     Some(PointerEvent {
         hit: parse_hit_info(json_obj),
-        screen_position: get_vec2_from_js(json_obj, "screenPosition").unwrap_or(Vector2::new(0.0, 0.0)),
+        screen_position: get_vec2_from_js(json_obj, "screenPosition")
+            .unwrap_or(Vector2::new(0.0, 0.0)),
         ndc_position: get_vec2_from_js(json_obj, "ndcPosition").unwrap_or(Vector2::new(0.0, 0.0)),
         button: get_string_from_js(json_obj, "button").and_then(|s| match s.as_str() {
             "Left" => Some(MouseButton::Left),
@@ -285,11 +314,12 @@ fn parse_pointer_event(json: &str) -> Option<PointerEvent> {
 fn parse_drag_event(json: &str) -> Option<PointerDragEvent> {
     let json_val = js_sys::JSON::parse(json).ok()?;
     let json_obj = json_val.dyn_ref::<js_sys::Object>()?;
-    
+
     let hit = parse_hit_info(json_obj);
-    let screen_position = get_vec2_from_js(json_obj, "screenPosition").unwrap_or(Vector2::new(0.0, 0.0));
+    let screen_position =
+        get_vec2_from_js(json_obj, "screenPosition").unwrap_or(Vector2::new(0.0, 0.0));
     let delta = get_vec2_from_js(json_obj, "delta").unwrap_or(Vector2::new(0.0, 0.0));
-    
+
     Some(PointerDragEvent {
         hit,
         start_hit: None,
@@ -307,31 +337,42 @@ fn parse_drag_event(json: &str) -> Option<PointerDragEvent> {
 fn parse_gizmo_event(json: &str) -> Option<crate::GizmoEvent> {
     let json_val = js_sys::JSON::parse(json).ok()?;
     let json_obj = json_val.dyn_ref::<js_sys::Object>()?;
-    
+
     let target = get_f32_from_js(json_obj, "target")? as usize;
-    let mode = get_string_from_js(json_obj, "mode").map(|s| match s.to_lowercase().as_str() {
-        "translate" => crate::GizmoMode::Translate,
-        "rotate" => crate::GizmoMode::Rotate,
-        "scale" => crate::GizmoMode::Scale,
-        _ => crate::GizmoMode::Translate,
-    }).unwrap_or(crate::GizmoMode::Translate);
-    
-    let space = get_string_from_js(json_obj, "space").map(|s| match s.to_lowercase().as_str() {
-        "local" => crate::GizmoSpace::Local,
-        _ => crate::GizmoSpace::World,
-    }).unwrap_or(crate::GizmoSpace::World);
-    
-    let transform_obj = js_sys::Reflect::get(json_obj, &"transform".into()).ok()?.dyn_ref::<js_sys::Object>()?.clone();
+    let mode = get_string_from_js(json_obj, "mode")
+        .map(|s| match s.to_lowercase().as_str() {
+            "translate" => crate::GizmoMode::Translate,
+            "rotate" => crate::GizmoMode::Rotate,
+            "scale" => crate::GizmoMode::Scale,
+            _ => crate::GizmoMode::Translate,
+        })
+        .unwrap_or(crate::GizmoMode::Translate);
+
+    let space = get_string_from_js(json_obj, "space")
+        .map(|s| match s.to_lowercase().as_str() {
+            "local" => crate::GizmoSpace::Local,
+            _ => crate::GizmoSpace::World,
+        })
+        .unwrap_or(crate::GizmoSpace::World);
+
+    let transform_obj = js_sys::Reflect::get(json_obj, &"transform".into())
+        .ok()?
+        .dyn_ref::<js_sys::Object>()?
+        .clone();
     let position = get_vec3_from_js(&transform_obj, "position").unwrap_or(Vector3::ZERO);
     let rotation = get_vec3_from_js(&transform_obj, "rotation").unwrap_or(Vector3::ZERO);
     let scale = get_vec3_from_js(&transform_obj, "scale").unwrap_or(Vector3::new(1.0, 1.0, 1.0));
     let is_finished = get_bool_from_js(json_obj, "isFinished");
-    
+
     Some(crate::GizmoEvent {
         target: EntityId(target),
         mode,
         space,
-        transform: crate::GizmoTransform { position, rotation, scale },
+        transform: crate::GizmoTransform {
+            position,
+            rotation,
+            scale,
+        },
         is_finished,
     })
 }
@@ -379,12 +420,12 @@ pub fn ThreeView(props: ThreeViewProps) -> Element {
     let mut wireframe = use_signal(|| props.wireframe);
     let mut models = use_signal(|| props.models.clone());
     let mut prev_models = use_signal(|| props.models.clone());
-    
+
     // Phase 1: Selection and gizmo state
     let mut selection = use_signal(|| props.selection.clone());
     let mut gizmo = use_signal(|| props.gizmo.clone());
     let mut selection_style = use_signal(|| props.selection_style.clone());
-    
+
     // Store callbacks
     let canvas_id_for_callbacks = canvas_id();
     let _ = use_hook(|| {
@@ -423,7 +464,7 @@ pub fn ThreeView(props: ThreeViewProps) -> Element {
             models.set(new_props.models.clone());
             prev_models.set(new_props.models.clone());
         }
-        
+
         selection.set(new_props.selection.clone());
         gizmo.set(new_props.gizmo.clone());
         selection_style.set(new_props.selection_style.clone());
@@ -519,10 +560,7 @@ pub fn ThreeView(props: ThreeViewProps) -> Element {
         let gizmo_json = match gz {
             Some(g) => format!(
                 r#"{{"target": {}, "mode": "{:?}", "space": "{:?}", "size": {}}}"#,
-                g.target.0,
-                g.mode,
-                g.space,
-                g.size
+                g.target.0, g.mode, g.space, g.size
             ),
             None => "null".to_string(),
         };

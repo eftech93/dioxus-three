@@ -3,8 +3,8 @@
 //! Enhanced with eval bridge for iframe -> Rust event communication.
 
 use crate::{
-    generate_three_js_html, EntityId, GizmoEvent, GizmoMode, GizmoSpace, GizmoTransform,
-    HitInfo, PointerEvent, ThreeViewProps, Vector2, Vector3,
+    generate_three_js_html, EntityId, GizmoEvent, GizmoMode, GizmoSpace, GizmoTransform, HitInfo,
+    PointerEvent, ThreeViewProps, Vector2, Vector3,
 };
 use dioxus::document::eval;
 use dioxus::prelude::*;
@@ -74,9 +74,18 @@ fn parse_pointer_event(data: &serde_json::Value) -> Option<PointerEvent> {
         "Middle" => Some(crate::MouseButton::Middle),
         _ => None,
     });
-    let shift_key = data.get("shiftKey").and_then(|v| v.as_bool()).unwrap_or(false);
-    let ctrl_key = data.get("ctrlKey").and_then(|v| v.as_bool()).unwrap_or(false);
-    let alt_key = data.get("altKey").and_then(|v| v.as_bool()).unwrap_or(false);
+    let shift_key = data
+        .get("shiftKey")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let ctrl_key = data
+        .get("ctrlKey")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let alt_key = data
+        .get("altKey")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
 
     Some(PointerEvent {
         hit,
@@ -149,7 +158,7 @@ pub fn ThreeView(mut props: ThreeViewProps) -> Element {
     let on_selection_change = props.on_selection_change.take();
 
     // Set up eval bridge for iframe events
-    let _ = use_hook(move || {
+    use_hook(move || {
         spawn(async move {
             let mut eval = eval(
                 r#"
@@ -186,7 +195,7 @@ pub fn ThreeView(mut props: ThreeViewProps) -> Element {
                     Ok(event) => {
                         let event_type = event.get("type").and_then(|v| v.as_str());
                         let data = event.get("data");
-                        
+
                         println!("[DESKTOP BRIDGE] received event: {:?}", event_type);
 
                         match event_type {
@@ -202,13 +211,18 @@ pub fn ThreeView(mut props: ThreeViewProps) -> Element {
                                 println!("[DESKTOP BRIDGE] pointer-down event");
                                 if let (Some(cb), Some(data)) = (&on_pointer_down, data) {
                                     if let Some(ptr_event) = parse_pointer_event(data) {
-                                        println!("[DESKTOP BRIDGE] parsed pointer-down: hit={:?}", ptr_event.hit.as_ref().map(|h| h.entity_id));
+                                        println!(
+                                            "[DESKTOP BRIDGE] parsed pointer-down: hit={:?}",
+                                            ptr_event.hit.as_ref().map(|h| h.entity_id)
+                                        );
                                         cb.call(ptr_event);
                                     } else {
                                         println!("[DESKTOP BRIDGE] failed to parse pointer-down");
                                     }
                                 } else {
-                                    println!("[DESKTOP BRIDGE] no pointer-down callback registered");
+                                    println!(
+                                        "[DESKTOP BRIDGE] no pointer-down callback registered"
+                                    );
                                 }
                             }
                             Some("pointer-up") => {
@@ -232,9 +246,12 @@ pub fn ThreeView(mut props: ThreeViewProps) -> Element {
                                             .as_array()
                                             .unwrap_or(&vec![])
                                             .iter()
-                                            .filter_map(|v| v.as_u64().map(|id| EntityId(id as usize)))
+                                            .filter_map(|v| {
+                                                v.as_u64().map(|id| EntityId(id as usize))
+                                            })
                                             .collect();
-                                        let mut selection = crate::Selection::with_mode(props.selection_mode);
+                                        let mut selection =
+                                            crate::Selection::with_mode(props.selection_mode);
                                         for id in ids {
                                             selection.select(id);
                                         }
@@ -264,13 +281,19 @@ pub fn ThreeView(mut props: ThreeViewProps) -> Element {
             prev_models_len.set(new_len);
             return;
         }
-        
+
         spawn(async move {
             let selection_json = match &new_props.selection {
-                Some(s) => format!("[{}]", s.iter().map(|e| e.0.to_string()).collect::<Vec<_>>().join(",")),
+                Some(s) => format!(
+                    "[{}]",
+                    s.iter()
+                        .map(|e| e.0.to_string())
+                        .collect::<Vec<_>>()
+                        .join(",")
+                ),
                 None => "[]".to_string(),
             };
-            
+
             let gizmo_json = match &new_props.gizmo {
                 Some(g) => format!(
                     r#"{{"target":{},"mode":"{:?}","space":"{:?}"}}"#,
@@ -278,10 +301,14 @@ pub fn ThreeView(mut props: ThreeViewProps) -> Element {
                 ),
                 None => "null".to_string(),
             };
-            
-            println!("[DESKTOP] Sending postMessage - selection: {}, gizmo: {}", selection_json, gizmo_json);
-            
-            let js = format!(r#"
+
+            println!(
+                "[DESKTOP] Sending postMessage - selection: {}, gizmo: {}",
+                selection_json, gizmo_json
+            );
+
+            let js = format!(
+                r#"
                 (function() {{
                     const iframe = document.querySelector('iframe[srcdoc]');
                     if (iframe && iframe.contentWindow) {{
@@ -320,7 +347,10 @@ pub fn ThreeView(mut props: ThreeViewProps) -> Element {
                 new_props.rot_speed,
                 new_props.scale,
                 new_props.color.replace('\\', "\\\\").replace('\'', "\\'"),
-                new_props.background.replace('\\', "\\\\").replace('\'', "\\'"),
+                new_props
+                    .background
+                    .replace('\\', "\\\\")
+                    .replace('\'', "\\'"),
                 new_props.show_grid.to_string().to_lowercase(),
                 new_props.show_axes.to_string().to_lowercase(),
                 new_props.wireframe.to_string().to_lowercase(),

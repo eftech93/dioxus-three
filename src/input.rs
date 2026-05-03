@@ -3,7 +3,6 @@
 //! Provides pointer event handling, raycasting for 3D object selection,
 //! and gesture recognition for touch devices.
 
-
 /// A unique identifier for entities in the 3D scene
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct EntityId(pub usize);
@@ -55,19 +54,35 @@ pub struct Vector3 {
 }
 
 impl Vector3 {
-    pub const ZERO: Self = Self { x: 0.0, y: 0.0, z: 0.0 };
-    pub const UP: Self = Self { x: 0.0, y: 1.0, z: 0.0 };
-    pub const RIGHT: Self = Self { x: 1.0, y: 0.0, z: 0.0 };
-    pub const FORWARD: Self = Self { x: 0.0, y: 0.0, z: 1.0 };
-    
+    pub const ZERO: Self = Self {
+        x: 0.0,
+        y: 0.0,
+        z: 0.0,
+    };
+    pub const UP: Self = Self {
+        x: 0.0,
+        y: 1.0,
+        z: 0.0,
+    };
+    pub const RIGHT: Self = Self {
+        x: 1.0,
+        y: 0.0,
+        z: 0.0,
+    };
+    pub const FORWARD: Self = Self {
+        x: 0.0,
+        y: 0.0,
+        z: 1.0,
+    };
+
     pub fn new(x: f32, y: f32, z: f32) -> Self {
         Self { x, y, z }
     }
-    
+
     pub fn length(&self) -> f32 {
         (self.x * self.x + self.y * self.y + self.z * self.z).sqrt()
     }
-    
+
     pub fn normalize(&self) -> Self {
         let len = self.length();
         if len > 0.0 {
@@ -80,7 +95,7 @@ impl Vector3 {
             *self
         }
     }
-    
+
     pub fn distance(&self, other: &Self) -> f32 {
         (*self - *other).length()
     }
@@ -254,14 +269,14 @@ impl Raycaster {
             far: 1000.0,
         }
     }
-    
+
     /// Cast a ray from camera through screen position
     pub fn from_camera(camera: &Camera, _screen_pos: Vector2) -> Self {
         // This would be implemented in platform-specific code
         // For now, placeholder
         Self::new(camera.position, Vector3::FORWARD)
     }
-    
+
     /// Get a point at a specific distance along the ray
     pub fn at(&self, distance: f32) -> Vector3 {
         self.origin + self.direction * distance
@@ -316,7 +331,9 @@ pub struct InputState {
 
 impl InputState {
     pub fn is_key_pressed(&self, key: &str) -> bool {
-        self.keys_pressed.iter().any(|k| k.eq_ignore_ascii_case(key))
+        self.keys_pressed
+            .iter()
+            .any(|k| k.eq_ignore_ascii_case(key))
     }
 }
 
@@ -328,17 +345,17 @@ mod tests {
     fn test_vector3_operations() {
         let a = Vector3::new(1.0, 2.0, 3.0);
         let b = Vector3::new(4.0, 5.0, 6.0);
-        
+
         let sum = a + b;
         assert_eq!(sum.x, 5.0);
         assert_eq!(sum.y, 7.0);
         assert_eq!(sum.z, 9.0);
-        
+
         let diff = b - a;
         assert_eq!(diff.x, 3.0);
         assert_eq!(diff.y, 3.0);
         assert_eq!(diff.z, 3.0);
-        
+
         let scaled = a * 2.0;
         assert_eq!(scaled.x, 2.0);
         assert_eq!(scaled.y, 4.0);
@@ -349,7 +366,7 @@ mod tests {
     fn test_vector3_distance() {
         let a = Vector3::new(0.0, 0.0, 0.0);
         let b = Vector3::new(3.0, 4.0, 0.0);
-        
+
         assert_eq!(a.distance(&b), 5.0);
     }
 

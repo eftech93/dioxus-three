@@ -16,18 +16,17 @@ use dioxus::prelude::*;
 use std::collections::HashMap;
 
 // Input handling and raycasting
+pub mod gizmos;
 pub mod input;
 pub mod selection;
-pub mod gizmos;
 
 // Re-export input types
+pub use gizmos::{Gizmo, GizmoEvent, GizmoMode, GizmoSpace, GizmoTransform};
 pub use input::{
-    EntityId, Vector2, Vector3, HitInfo, 
-    PointerEvent, PointerDragEvent, GestureEvent,
-    RaycastConfig, Raycaster, Camera, MouseButton, CursorStyle,
+    Camera, CursorStyle, EntityId, GestureEvent, HitInfo, MouseButton, PointerDragEvent,
+    PointerEvent, RaycastConfig, Raycaster, Vector2, Vector3,
 };
 pub use selection::{Selection, SelectionMode, SelectionStyle};
-pub use gizmos::{Gizmo, GizmoMode, GizmoSpace, GizmoEvent, GizmoTransform};
 
 // Platform-specific modules
 #[cfg(not(target_arch = "wasm32"))]
@@ -328,61 +327,60 @@ pub struct ThreeViewProps {
     /// Shader preset or custom shader
     #[props(default = ShaderPreset::None)]
     pub shader: ShaderPreset,
-    
+
     // === Phase 1: Input & Selection Features ===
-    
     /// Unique ID for this view (needed for pointer event routing)
     #[props(default = None)]
     pub id: Option<String>,
-    
+
     /// Raycast configuration
     #[props(default = RaycastConfig::default())]
     pub raycast: RaycastConfig,
-    
+
     /// Callback for pointer down events
     #[props(default = None)]
     pub on_pointer_down: Option<Callback<PointerEvent>>,
-    
+
     /// Callback for pointer up events
     #[props(default = None)]
     pub on_pointer_up: Option<Callback<PointerEvent>>,
-    
+
     /// Callback for pointer move events (hover)
     #[props(default = None)]
     pub on_pointer_move: Option<Callback<PointerEvent>>,
-    
+
     /// Callback for pointer drag events
     #[props(default = None)]
     pub on_pointer_drag: Option<Callback<PointerDragEvent>>,
-    
+
     /// Callback for gesture events (pinch, rotate, pan)
     #[props(default = None)]
     pub on_gesture: Option<Callback<GestureEvent>>,
-    
+
     /// Current selection state
     #[props(default = None)]
     pub selection: Option<Selection>,
-    
+
     /// Selection mode
     #[props(default = SelectionMode::Single)]
     pub selection_mode: SelectionMode,
-    
+
     /// Visual style for selection
     #[props(default = SelectionStyle::default())]
     pub selection_style: SelectionStyle,
-    
+
     /// Callback when selection changes
     #[props(default = None)]
     pub on_selection_change: Option<Callback<Selection>>,
-    
+
     /// Gizmo configuration for transform manipulation
     #[props(default = None)]
     pub gizmo: Option<Gizmo>,
-    
+
     /// Callback during gizmo drag
     #[props(default = None)]
     pub on_gizmo_drag: Option<Callback<GizmoEvent>>,
-    
+
     /// Enable debug overlay
     #[props(default = false)]
     pub debug: bool,
@@ -655,24 +653,26 @@ pub fn generate_three_js_html(props: &ThreeViewProps) -> String {
         build_shader_code(&props.shader);
 
     // Serialize selection and gizmo state for JavaScript
-    let selection_ids_json = props.selection.as_ref()
+    let selection_ids_json = props
+        .selection
+        .as_ref()
         .map(|s| {
             let ids: Vec<String> = s.iter().map(|e| e.0.to_string()).collect();
             format!("[{}]", ids.join(", "))
         })
         .unwrap_or_else(|| "[]".to_string());
-    
-    let gizmo_config_json = props.gizmo.as_ref()
+
+    let gizmo_config_json = props
+        .gizmo
+        .as_ref()
         .map(|g| {
             format!(
                 r#"{{"target": {}, "mode": "{:?}", "space": "{:?}"}}"#,
-                g.target.0,
-                g.mode,
-                g.space
+                g.target.0, g.mode, g.space
             )
         })
         .unwrap_or_else(|| "null".to_string());
-    
+
     let selection_style_json = format!(
         r#"{{"outline": {}, "outline_color": "{}", "outline_width": {}, "highlight": {}, "highlight_color": "{}", "highlight_opacity": {}, "show_gizmo": {}}}"#,
         props.selection_style.outline.to_string().to_lowercase(),
@@ -683,7 +683,7 @@ pub fn generate_three_js_html(props: &ThreeViewProps) -> String {
         props.selection_style.highlight_opacity,
         props.selection_style.show_gizmo.to_string().to_lowercase(),
     );
-    
+
     let raycast_enabled = props.raycast.enabled;
     let selection_enabled = props.selection.is_some();
 

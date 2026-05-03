@@ -6,10 +6,10 @@
 //! - Shader effects
 //! - Phase 1: Raycasting, Selection, Transform Gizmos
 
-use std::collections::HashMap;
 use dioxus::prelude::*;
+use dioxus_three::{EntityId, Gizmo, GizmoMode, GizmoSpace, GizmoTransform, Selection};
 use dioxus_three::{ModelConfig, ModelFormat, ShaderPreset};
-use dioxus_three::{Selection, Gizmo, GizmoMode, GizmoSpace, EntityId, GizmoTransform};
+use std::collections::HashMap;
 
 #[derive(Clone, PartialEq, Debug)]
 struct SceneModel {
@@ -25,29 +25,31 @@ fn main() {
 
 fn app() -> Element {
     // Scene models - start with 3 colored cubes
-    let mut models = use_signal(|| vec![
-        SceneModel { 
-            id: 0, 
-            name: "Red Cube".to_string(), 
-            config: ModelConfig::new("", ModelFormat::Cube)
-                .with_position(-2.0, 0.0, 0.0)
-                .with_color("#ff6b6b") 
-        },
-        SceneModel { 
-            id: 1, 
-            name: "Green Cube".to_string(), 
-            config: ModelConfig::new("", ModelFormat::Cube)
-                .with_position(0.0, 0.0, 0.0)
-                .with_color("#6bcf7f") 
-        },
-        SceneModel { 
-            id: 2, 
-            name: "Blue Cube".to_string(), 
-            config: ModelConfig::new("", ModelFormat::Cube)
-                .with_position(2.0, 0.0, 0.0)
-                .with_color("#4dabf7") 
-        },
-    ]);
+    let mut models = use_signal(|| {
+        vec![
+            SceneModel {
+                id: 0,
+                name: "Red Cube".to_string(),
+                config: ModelConfig::new("", ModelFormat::Cube)
+                    .with_position(-2.0, 0.0, 0.0)
+                    .with_color("#ff6b6b"),
+            },
+            SceneModel {
+                id: 1,
+                name: "Green Cube".to_string(),
+                config: ModelConfig::new("", ModelFormat::Cube)
+                    .with_position(0.0, 0.0, 0.0)
+                    .with_color("#6bcf7f"),
+            },
+            SceneModel {
+                id: 2,
+                name: "Blue Cube".to_string(),
+                config: ModelConfig::new("", ModelFormat::Cube)
+                    .with_position(2.0, 0.0, 0.0)
+                    .with_color("#4dabf7"),
+            },
+        ]
+    });
     let mut next_id = use_signal(|| 3usize);
 
     // Camera state
@@ -56,13 +58,13 @@ fn app() -> Element {
     let mut cam_z = use_signal(|| 8.0f32);
 
     // Phase 1: Selection and Gizmo state
-    let mut selection = use_signal(|| Selection::new());
+    let mut selection = use_signal(Selection::new);
     let mut gizmo_mode = use_signal(|| GizmoMode::Translate);
     let mut gizmo_space = use_signal(|| GizmoSpace::World);
     let show_gizmo = use_signal(|| true);
 
     // Track transform overrides from gizmo drags
-    let mut transform_overrides = use_signal(|| HashMap::<usize, GizmoTransform>::new());
+    let mut transform_overrides = use_signal(HashMap::<usize, GizmoTransform>::new);
 
     // Global options
     let mut auto_rotate = use_signal(|| false);
@@ -117,22 +119,22 @@ fn app() -> Element {
                             "Select All"
                         }
                     }
-                    
-                    p { class: "text-sm text-gray-400 mb-2", 
-                        "Selected: {selection().count()} object(s)" 
+
+                    p { class: "text-sm text-gray-400 mb-2",
+                        "Selected: {selection().count()} object(s)"
                     }
-                    
+
                     // Selected items list with model names
                     for id in selection().iter() {
                         {
                             let model_name = models().get(id.0).map(|m| m.name.clone()).unwrap_or_else(|| format!("Object {}", id.0));
                             let is_primary = selection().primary() == Some(id);
                             rsx! {
-                                div { 
-                                    class: if is_primary { 
-                                        "bg-yellow-600 rounded px-3 py-2 mb-1 text-sm flex items-center gap-2 border-2 border-yellow-400" 
-                                    } else { 
-                                        "bg-gray-600 rounded px-3 py-2 mb-1 text-sm flex items-center gap-2 border border-gray-500" 
+                                div {
+                                    class: if is_primary {
+                                        "bg-yellow-600 rounded px-3 py-2 mb-1 text-sm flex items-center gap-2 border-2 border-yellow-400"
+                                    } else {
+                                        "bg-gray-600 rounded px-3 py-2 mb-1 text-sm flex items-center gap-2 border border-gray-500"
                                     },
                                     div { class: "flex items-center gap-2 flex-1",
                                         span { class: "text-yellow-300 text-lg", "★" }
@@ -148,7 +150,7 @@ fn app() -> Element {
                             }
                         }
                     }
-                    
+
                     if !selection().has_selection() {
                         div { class: "text-xs text-gray-500 italic bg-gray-700 rounded p-3",
                             p { "💡 Click objects to select" }
@@ -160,7 +162,7 @@ fn app() -> Element {
                             p { "🎯 Primary selection (★) controls the gizmo" }
                             p { "📦 Selected items show yellow border + corners in 3D view" }
                         }
-                        
+
                         // Transform readout for primary selection
                         if let Some(primary_id) = selection().primary() {
                             {
@@ -174,7 +176,7 @@ fn app() -> Element {
                                         .unwrap_or_else(|| dioxus_three::Vector3::new(model.config.rot_x.to_radians(), model.config.rot_y.to_radians(), model.config.rot_z.to_radians()));
                                     let scl = transform.map(|t| t.scale)
                                         .unwrap_or_else(|| dioxus_three::Vector3::new(model.config.scale, model.config.scale, model.config.scale));
-                                    
+
                                     rsx! {
                                         div { class: "mt-2 bg-gray-900 rounded p-2 text-xs font-mono space-y-1",
                                             p { class: "text-gray-400 font-medium", "📐 Transform" }
@@ -194,47 +196,47 @@ fn app() -> Element {
                 // Phase 1: Gizmo Section
                 ControlGroup { title: "🔧 Transform Gizmo (Phase 1)",
                     Toggle { label: "Show Gizmo", value: show_gizmo }
-                    
+
                     if show_gizmo() {
                         div { class: "mt-3 space-y-3",
                             div {
                                 label { class: "block text-xs text-gray-400 mb-1", "Mode" }
                                 div { class: "grid grid-cols-3 gap-2",
-                                    GizmoModeButton { 
-                                        label: "Move", 
+                                    GizmoModeButton {
+                                        label: "Move",
                                         active: matches!(gizmo_mode(), GizmoMode::Translate),
                                         onclick: move |_| gizmo_mode.set(GizmoMode::Translate)
                                     }
-                                    GizmoModeButton { 
-                                        label: "Rotate", 
+                                    GizmoModeButton {
+                                        label: "Rotate",
                                         active: matches!(gizmo_mode(), GizmoMode::Rotate),
                                         onclick: move |_| gizmo_mode.set(GizmoMode::Rotate)
                                     }
-                                    GizmoModeButton { 
-                                        label: "Scale", 
+                                    GizmoModeButton {
+                                        label: "Scale",
                                         active: matches!(gizmo_mode(), GizmoMode::Scale),
                                         onclick: move |_| gizmo_mode.set(GizmoMode::Scale)
                                     }
                                 }
                             }
-                            
+
                             div {
                                 label { class: "block text-xs text-gray-400 mb-1", "Space" }
                                 div { class: "grid grid-cols-2 gap-2",
                                     button {
-                                        class: if matches!(gizmo_space(), GizmoSpace::World) { 
-                                            "bg-yellow-600 hover:bg-yellow-700 px-3 py-2 rounded text-sm transition" 
-                                        } else { 
-                                            "bg-gray-600 hover:bg-gray-500 px-3 py-2 rounded text-sm transition" 
+                                        class: if matches!(gizmo_space(), GizmoSpace::World) {
+                                            "bg-yellow-600 hover:bg-yellow-700 px-3 py-2 rounded text-sm transition"
+                                        } else {
+                                            "bg-gray-600 hover:bg-gray-500 px-3 py-2 rounded text-sm transition"
                                         },
                                         onclick: move |_| gizmo_space.set(GizmoSpace::World),
                                         "World"
                                     }
                                     button {
-                                        class: if matches!(gizmo_space(), GizmoSpace::Local) { 
-                                            "bg-yellow-600 hover:bg-yellow-700 px-3 py-2 rounded text-sm transition" 
-                                        } else { 
-                                            "bg-gray-600 hover:bg-gray-500 px-3 py-2 rounded text-sm transition" 
+                                        class: if matches!(gizmo_space(), GizmoSpace::Local) {
+                                            "bg-yellow-600 hover:bg-yellow-700 px-3 py-2 rounded text-sm transition"
+                                        } else {
+                                            "bg-gray-600 hover:bg-gray-500 px-3 py-2 rounded text-sm transition"
                                         },
                                         onclick: move |_| gizmo_space.set(GizmoSpace::Local),
                                         "Local"
@@ -250,10 +252,10 @@ fn app() -> Element {
                     div { class: "mb-3 max-h-32 overflow-y-auto",
                         for (idx, model) in models().iter().enumerate() {
                             div {
-                                class: if selection().is_selected(EntityId(idx)) { 
-                                    "flex items-center justify-between p-2 bg-yellow-600 rounded mb-1 cursor-pointer" 
-                                } else { 
-                                    "flex items-center justify-between p-2 bg-gray-700 rounded mb-1 cursor-pointer hover:bg-gray-600" 
+                                class: if selection().is_selected(EntityId(idx)) {
+                                    "flex items-center justify-between p-2 bg-yellow-600 rounded mb-1 cursor-pointer"
+                                } else {
+                                    "flex items-center justify-between p-2 bg-gray-700 rounded mb-1 cursor-pointer hover:bg-gray-600"
                                 },
                                 onclick: move |_| {
                                     selection.write().toggle(EntityId(idx));
@@ -336,14 +338,14 @@ fn app() -> Element {
                             class: "w-full bg-green-600 hover:bg-green-700 px-3 py-2 rounded text-sm font-medium transition",
                             onclick: move |_| {
                                 let id = next_id();
-                                let name = if new_name().is_empty() { 
-                                    format!("Model {}", id) 
-                                } else { 
-                                    new_name() 
+                                let name = if new_name().is_empty() {
+                                    format!("Model {}", id)
+                                } else {
+                                    new_name()
                                 };
                                 let url = new_url();
                                 let fmt = new_format();
-                                
+
                                 models.write().push(SceneModel {
                                     id,
                                     name,
@@ -459,10 +461,10 @@ fn app() -> Element {
                     show_axes: show_axes(),
                     shader: shader(),
                     wireframe: wireframe(),
-                    
+
                     // Phase 1: Raycasting
                     raycast: dioxus_three::RaycastConfig::default(),
-                    
+
                     // Phase 1: Pointer events
                     on_pointer_down: move |event: dioxus_three::PointerEvent| {
                         if let Some(hit) = event.hit {
@@ -475,12 +477,12 @@ fn app() -> Element {
                             selection.write().clear();
                         }
                     },
-                    
+
                     // Phase 1: Selection
                     selection: Some(selection()),
                     selection_mode: dioxus_three::SelectionMode::Multiple,
                     selection_style: dioxus_three::SelectionStyle::default(),
-                    
+
                     // Phase 1: Gizmo
                     gizmo: if show_gizmo() {
                         selection().primary().map(|id| {
@@ -491,7 +493,7 @@ fn app() -> Element {
                     } else {
                         None
                     },
-                    
+
                     on_gizmo_drag: move |event: dioxus_three::GizmoEvent| {
                         println!("[DEMO] gizmo_drag - entity: {}, mode: {:?}, finished: {}, scale: {:?}",
                             event.target.0, event.mode, event.is_finished, event.transform.scale);
@@ -561,10 +563,10 @@ fn Toggle(label: String, value: Signal<bool>) -> Element {
 fn GizmoModeButton(label: String, active: bool, onclick: EventHandler<()>) -> Element {
     rsx! {
         button {
-            class: if active { 
-                "bg-yellow-600 hover:bg-yellow-700 px-3 py-2 rounded text-sm font-medium transition" 
-            } else { 
-                "bg-gray-600 hover:bg-gray-500 px-3 py-2 rounded text-sm transition" 
+            class: if active {
+                "bg-yellow-600 hover:bg-yellow-700 px-3 py-2 rounded text-sm font-medium transition"
+            } else {
+                "bg-gray-600 hover:bg-gray-500 px-3 py-2 rounded text-sm transition"
             },
             onclick: move |_| onclick.call(()),
             "{label}"

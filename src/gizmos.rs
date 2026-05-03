@@ -6,9 +6,10 @@
 use crate::input::{EntityId, Vector3};
 
 /// Type of transformation gizmo
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum GizmoMode {
     /// Translation handles
+    #[default]
     Translate,
     /// Rotation handles
     Rotate,
@@ -16,25 +17,14 @@ pub enum GizmoMode {
     Scale,
 }
 
-impl Default for GizmoMode {
-    fn default() -> Self {
-        GizmoMode::Translate
-    }
-}
-
 /// Coordinate space for gizmo operation
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum GizmoSpace {
     /// World coordinates
+    #[default]
     World,
     /// Local object coordinates
     Local,
-}
-
-impl Default for GizmoSpace {
-    fn default() -> Self {
-        GizmoSpace::World
-    }
 }
 
 /// Configuration for a transformation gizmo
@@ -74,32 +64,32 @@ impl Gizmo {
             show_planes: true,
         }
     }
-    
+
     pub fn with_mode(mut self, mode: GizmoMode) -> Self {
         self.mode = mode;
         self
     }
-    
+
     pub fn with_space(mut self, space: GizmoSpace) -> Self {
         self.space = space;
         self
     }
-    
+
     pub fn with_size(mut self, size: f32) -> Self {
         self.size = size;
         self
     }
-    
+
     pub fn hide_x(mut self) -> Self {
         self.show_x = false;
         self
     }
-    
+
     pub fn hide_y(mut self) -> Self {
         self.show_y = false;
         self
     }
-    
+
     pub fn hide_z(mut self) -> Self {
         self.show_z = false;
         self
@@ -169,37 +159,37 @@ impl GizmoBuilder {
             gizmo: Gizmo::new(target),
         }
     }
-    
+
     pub fn translate(mut self) -> Self {
         self.gizmo.mode = GizmoMode::Translate;
         self
     }
-    
+
     pub fn rotate(mut self) -> Self {
         self.gizmo.mode = GizmoMode::Rotate;
         self
     }
-    
+
     pub fn scale(mut self) -> Self {
         self.gizmo.mode = GizmoMode::Scale;
         self
     }
-    
+
     pub fn world_space(mut self) -> Self {
         self.gizmo.space = GizmoSpace::World;
         self
     }
-    
+
     pub fn local_space(mut self) -> Self {
         self.gizmo.space = GizmoSpace::Local;
         self
     }
-    
+
     pub fn size(mut self, size: f32) -> Self {
         self.gizmo.size = size;
         self
     }
-    
+
     pub fn build(self) -> Gizmo {
         self.gizmo
     }
