@@ -10,7 +10,7 @@ A Dioxus component that wraps Three.js, providing a cross-platform 3D viewer for
 
 ```toml
 [dependencies]
-dioxus-three = "0.0.3"
+dioxus-three = "0.0.4"
 dioxus = "0.6"
 ```
 
