@@ -26,9 +26,9 @@ Dioxus Three provides a Dioxus component that embeds a Three.js 3D viewer, allow
 | Desktop (WebView) | ✅ Ready | Tauri/WebView on macOS, Linux, Windows |
 | Web (WASM) | ✅ Ready | WASM + Three.js canvas |
 | Mobile (WebView) | 🔄 Partial | WebView-based, iOS/Android |
-| **Selection** | ✅ **v0.0.3** | Click to select objects, multi-select with Ctrl/Cmd |
+| **Selection** | ✅ **v0.0.3** | Click to select objects, multi-select with Shift |
 | **Gizmos** | ✅ **v0.0.3** | Translate, Rotate, Scale handles |
-| **Pointer Events** | ✅ **v0.0.3** | on_pointer_down, on_pointer_move, on_pointer_up |
+| **Pointer Events** | ✅ **v0.0.3** | `on_pointer_down`, `on_pointer_move`, `on_pointer_up` |
 | **Raycasting** | ✅ **v0.0.3** | Hit detection for clicks and hovers |
 | Animation | 🔄 Planned | Keyframe and procedural animation |
 | Physics | 🔄 Planned | Rapier.js integration |
@@ -48,19 +48,19 @@ Or use the git version for the latest:
 
 ```toml
 [dependencies]
-dioxus-three = { git = "https://github.com/yourusername/dioxus-three" }
+dioxus-three = { git = "https://github.com/eftech93/dioxus-three" }
 ```
 
 ## Quick Start
 
 ```rust
 use dioxus::prelude::*;
-use dioxus_three::prelude::*;
+use dioxus_three::{ThreeView, ModelFormat};
 
 fn App() -> Element {
     rsx! {
         ThreeView {
-            model_url: "model.glb",
+            model_url: Some("model.glb".to_string()),
             format: ModelFormat::Glb,
             cam_x: 2.0,
             cam_y: 2.0,
@@ -76,7 +76,7 @@ fn App() -> Element {
 
 ```rust
 use dioxus::prelude::*;
-use dioxus_three::prelude::*;
+use dioxus_three::{ThreeView, ModelFormat, ModelConfig, Selection, Gizmo, GizmoMode, GizmoEvent, SelectionMode};
 
 #[component]
 fn App() -> Element {
@@ -86,13 +86,9 @@ fn App() -> Element {
     rsx! {
         ThreeView {
             models: vec![
-                ModelConfig {
-                    model_url: Some("model.glb".to_string()),
-                    format: ModelFormat::Glb,
-                    ..Default::default()
-                }
+                ModelConfig::new("model.glb", ModelFormat::Glb)
             ],
-            selection: selection(),
+            selection: Some(selection()),
             selection_mode: SelectionMode::Single,
             on_selection_change: move |sel| {
                 selection.set(sel.clone());
@@ -118,7 +114,7 @@ fn App() -> Element {
 
 ```rust
 ThreeView {
-    model_url: "model.glb",
+    model_url: Some("model.glb".to_string()),
     shader: ShaderPreset::Custom {
         vertex: include_str!("shaders/vertex.glsl"),
         fragment: include_str!("shaders/fragment.glsl"),
@@ -131,18 +127,12 @@ ThreeView {
 ```rust
 ThreeView {
     models: vec![
-        ModelConfig {
-            model_url: Some("car.glb".to_string()),
-            pos_x: -2.0,
-            color: "#ff6b6b".to_string(),
-            ..Default::default()
-        },
-        ModelConfig {
-            model_url: Some("wheel.glb".to_string()),
-            pos_x: 2.0,
-            color: "#4ecdc4".to_string(),
-            ..Default::default()
-        },
+        ModelConfig::new("car.glb", ModelFormat::Glb)
+            .with_position(-2.0, 0.0, 0.0)
+            .with_color("#ff6b6b"),
+        ModelConfig::new("wheel.glb", ModelFormat::Glb)
+            .with_position(2.0, 0.0, 0.0)
+            .with_color("#4ecdc4"),
     ],
 }
 ```
@@ -157,6 +147,7 @@ Uses a WebView iframe with Three.js loaded from CDN. Includes:
 - Pointer events via `document::eval` bridge
 - **State updates via `postMessage`** (no iframe reload on camera/selection/gizmo changes)
 - Selection outline with wireframe box + inner glow
+- Gizmo handles always render on top via `depthTest: false`
 
 ### Web (WASM)
 
@@ -166,6 +157,7 @@ Renders Three.js directly to a `<canvas>` element:
 - Manual raycasting and drag math
 - Bridge via `wasm_bindgen` closures (`dioxusThreeRustBridge`)
 - Same selection and gizmo features as Desktop
+- Gizmo handles always render on top via `depthTest: false`
 
 ### Mobile
 

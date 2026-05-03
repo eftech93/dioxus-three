@@ -55,13 +55,9 @@ fn SceneWithGizmo() -> Element {
     rsx! {
         ThreeView {
             models: vec![
-                ModelConfig {
-                    model_url: Some("model.glb".to_string()),
-                    format: ModelFormat::Glb,
-                    ..Default::default()
-                }
+                ModelConfig::new("model.glb", ModelFormat::Glb)
             ],
-            selection: selection(),
+            selection: Some(selection()),
             on_selection_change: move |sel| {
                 selection.set(sel.clone());
                 gizmo.set(sel.primary().map(|id| Gizmo::new(id)));
@@ -145,10 +141,18 @@ Display live transform values:
 
 ```rust
 if let Some(primary) = selection().primary() {
+    let idx = primary.0;
     let tf = transform_overrides.read()
-        .get(&primary.0)
+        .get(&idx)
         .cloned()
-        .unwrap_or_else(|| GizmoTransform::from_model(&models.read()[primary.0].config));
+        .unwrap_or_else(|| {
+            let m = &models.read()[idx].config;
+            GizmoTransform {
+                position: Vector3::new(m.pos_x, m.pos_y, m.pos_z),
+                rotation: Vector3::new(m.rot_x.to_radians(), m.rot_y.to_radians(), m.rot_z.to_radians()),
+                scale: Vector3::new(m.scale, m.scale, m.scale),
+            }
+        });
 
     div { class: "transform-panel",
         p { "Position: ({:.2}, {:.2}, {:.2})", tf.position.x, tf.position.y, tf.position.z }
@@ -166,6 +170,7 @@ if let Some(primary) = selection().primary() {
 | Translate drag | Plane snapping (official) | Camera-facing plane intersection |
 | Rotate drag | Arcball (official) | Arcball rotation |
 | Scale drag | Relative scaling (official) | Distance-based scaling |
+| Handle occlusion | Never (depthTest disabled) | Never (depthTest disabled) |
 | Event bridge | `document::eval` + `postMessage` | `wasm_bindgen` closures |
 
 ## Performance Notes

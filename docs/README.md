@@ -25,9 +25,9 @@ dioxus = "0.6"
 | Desktop (macOS, Linux, Windows) | ✅ Ready | WebView iframe with Three.js |
 | Web (WASM) | ✅ Ready | Native canvas rendering |
 | Mobile (iOS, Android) | 🔄 Partial | WebView-based |
-| **Object selection** | ✅ **v0.0.3** | Click to select, multi-select with Ctrl/Cmd |
+| **Object selection** | ✅ **v0.0.3** | Click to select, multi-select with Shift |
 | **Transform gizmos** | ✅ **v0.0.3** | Translate, Rotate, Scale handles |
-| **Pointer events** | ✅ **v0.0.3** | on_pointer_down/move/up callbacks |
+| **Pointer events** | ✅ **v0.0.3** | `on_pointer_down`/`move`/`up` callbacks |
 | **Raycasting** | ✅ **v0.0.3** | Hit detection for clicks and hovers |
 | Animation | 🔄 Planned | Keyframe and procedural |
 | Physics | 🔄 Planned | Rapier.js integration |
@@ -36,9 +36,10 @@ dioxus = "0.6"
 ## Guides
 
 ### Getting Started
-- [Rendering Your First Model](guides/first-model.md) - Load a single 3D model
-- [Working with Multiple Models](guides/multi-model.md) - Scene composition
-- [Camera & Scene Setup](guides/camera-scene.md) - Camera, lighting, background
+- [Quick Start](guides/quickstart.md) - Step-by-step first scene
+- [Loading Models](guides/models.md) - Load single and multiple 3D models
+- [Camera Control](guides/camera.md) - Camera position, target, presets
+- [Managing Scene Properties](guides/scene-properties.md) - Reactive scene control with signals
 
 ### Input & Interaction
 - [Pointer Events & Selection](guides/pointer-selection.md) - Click, select, gizmos
@@ -46,14 +47,14 @@ dioxus = "0.6"
 
 ### Advanced
 - [Custom Shaders](guides/shaders.md) - Writing vertex/fragment shaders
-- [Platform Differences](guides/platforms.md) - Desktop vs Web vs Mobile
 - [Architecture](guides/architecture.md) - How Dioxus Three works internally
 
 ## API Reference
 
 - [ThreeView Component](api/threeview.md) - All props and configuration options
-- [ModelConfig](api/model-config.md) - Model loading configuration
-- [Selection & Gizmos](api/selection-gizmos.md) - Selection state and gizmo types
+- [ModelFormat](api/modelformat.md) - Supported model formats
+- [ShaderPreset](api/shaderpreset.md) - Built-in shader effects
+- [ShaderConfig](api/shaderconfig.md) - Custom shader configuration
 
 ## Platform Notes
 
@@ -63,6 +64,7 @@ dioxus = "0.6"
 - Gizmos via official `THREE.TransformControls`
 - Events bridged via `document::eval` + `postMessage`
 - State updates sent without iframe reload
+- Gizmo handles render on top via `depthTest: false`
 
 ### Web
 
@@ -70,6 +72,7 @@ dioxus = "0.6"
 - Custom-built gizmos with manual raycasting
 - Bridge via `wasm_bindgen` closures
 - Same selection/gizmo features as Desktop
+- Gizmo handles render on top via `depthTest: false`
 
 ### Mobile
 

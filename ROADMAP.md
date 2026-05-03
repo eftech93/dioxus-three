@@ -1421,9 +1421,9 @@ fn app() -> Element {
 ### Phase 1: Core Stability
 1. ✅ Scene Properties Management (DONE)
 2. ✅ Web Platform Camera Fix (DONE)
-3. 🔲 Pointer/Raycasting System
-4. 🔲 Selection API
-5. 🔲 Gizmos & Transform Manipulators
+3. ✅ Pointer/Raycasting System (DONE - v0.0.3)
+4. ✅ Selection API (DONE - v0.0.3)
+5. ✅ Gizmos & Transform Manipulators (DONE - v0.0.3)
 
 ### Phase 2: Essential Features
 6. 🔲 Lighting System

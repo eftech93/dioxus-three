@@ -6,12 +6,12 @@ The main component for rendering a Three.js 3D scene in Dioxus.
 
 ```rust
 use dioxus::prelude::*;
-use dioxus_three::prelude::*;
+use dioxus_three::{ThreeView, ModelFormat};
 
 fn App() -> Element {
     rsx! {
         ThreeView {
-            model_url: "model.glb",
+            model_url: Some("model.glb".to_string()),
             format: ModelFormat::Glb,
         }
     }
@@ -24,8 +24,8 @@ fn App() -> Element {
 
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `model_url` | `Option<String>` | `None` | Path or URL to a 3D model file |
-| `format` | `ModelFormat` | `Cube` | File format: `Glb`, `Gltf`, `Obj`, `Fbx`, `Stl`, `Ply`, `Collada`, `ThreeMF`, `Cube` |
+| `model_url` | `Option<String>` | `None` | Path or URL to a 3D model file (single-model mode) |
+| `format` | `ModelFormat` | `Cube` | File format: `Obj`, `Fbx`, `Gltf`, `Glb`, `Stl`, `Ply`, `Dae`, `Json`, `Cube` |
 | `pos_x` | `f32` | `0.0` | Model position X |
 | `pos_y` | `f32` | `0.0` | Model position Y |
 | `pos_z` | `f32` | `0.0` | Model position Z |
@@ -102,15 +102,20 @@ fn App() -> Element {
 ### Selection
 
 ```rust
-pub struct Selection {
-    pub entities: Vec<EntityId>,
-}
+pub struct Selection;
 
 impl Selection {
     pub fn empty() -> Self;
-    pub fn single(id: EntityId) -> Self;
+    pub fn with_mode(mode: SelectionMode) -> Self;
+    pub fn is_selected(&self, entity: EntityId) -> bool;
+    pub fn select(&mut self, entity: EntityId);
+    pub fn toggle(&mut self, entity: EntityId);
+    pub fn deselect(&mut self, entity: EntityId);
+    pub fn clear(&mut self);
+    pub fn count(&self) -> usize;
+    pub fn has_selection(&self) -> bool;
     pub fn primary(&self) -> Option<EntityId>;
-    pub fn contains(&self, id: EntityId) -> bool;
+    pub fn iter(&self) -> impl Iterator<Item = EntityId> + '_;
 }
 ```
 
@@ -152,7 +157,7 @@ pub struct GizmoEvent {
 ```rust
 pub struct GizmoTransform {
     pub position: Vector3,
-    pub rotation: Vector3,  // Euler angles in degrees
+    pub rotation: Vector3,  // Euler angles in radians
     pub scale: Vector3,
 }
 ```
@@ -161,11 +166,23 @@ pub struct GizmoTransform {
 
 ```rust
 pub struct PointerEvent {
-    pub entity_id: Option<EntityId>,
-    pub position: (f32, f32),       // Normalized device coordinates (-1 to 1)
-    pub screen_position: (f32, f32), // Screen coordinates (pixels)
-    pub button: PointerButton,       // Left | Right | Middle
-    pub modifiers: Modifiers,        // Shift | Ctrl | Alt | Meta
+    pub hit: Option<HitInfo>,
+    pub screen_position: Vector2,   // Screen coordinates (pixels)
+    pub ndc_position: Vector2,      // Normalized device coordinates (-1 to 1)
+    pub button: Option<MouseButton>,
+    pub shift_key: bool,
+    pub ctrl_key: bool,
+    pub alt_key: bool,
+}
+
+pub struct HitInfo {
+    pub entity_id: EntityId,
+    pub point: Vector3,
+    pub normal: Vector3,
+    pub uv: Option<Vector2>,
+    pub distance: f32,
+    pub face_index: Option<usize>,
+    pub instance_id: Option<usize>,
 }
 ```
 
@@ -173,11 +190,15 @@ pub struct PointerEvent {
 
 ```rust
 pub struct PointerDragEvent {
-    pub entity_id: Option<EntityId>,
-    pub start: (f32, f32),
-    pub current: (f32, f32),
-    pub delta: (f32, f32),
-    pub button: PointerButton,
+    pub hit: Option<HitInfo>,
+    pub start_hit: Option<HitInfo>,
+    pub screen_position: Vector2,
+    pub start_screen_position: Vector2,
+    pub world_position: Vector3,
+    pub start_world_position: Vector3,
+    pub delta: Vector2,
+    pub total_delta: Vector2,
+    pub button: MouseButton,
 }
 ```
 
@@ -185,10 +206,10 @@ pub struct PointerDragEvent {
 
 ```rust
 pub struct RaycastConfig {
-    pub enabled: bool,              // Enable raycasting
-    pub recursive: bool,            // Check child objects
-    pub max_distance: f32,          // Max raycast distance
-    pub layer_mask: u32,            // Layer filter bitmask
+    pub enabled: bool,
+    pub recursive: bool,
+    pub max_distance: f32,
+    pub layer_mask: Option<u32>,
 }
 
 impl Default for RaycastConfig {
@@ -196,10 +217,24 @@ impl Default for RaycastConfig {
         Self {
             enabled: true,
             recursive: true,
-            max_distance: f32::INFINITY,
-            layer_mask: 0xFFFFFFFF,
+            max_distance: 1000.0,
+            layer_mask: None,
         }
     }
+}
+```
+
+### SelectionStyle
+
+```rust
+pub struct SelectionStyle {
+    pub outline: bool,
+    pub outline_color: String,      // Hex color
+    pub outline_width: f32,
+    pub highlight: bool,
+    pub highlight_color: String,    // Hex color
+    pub highlight_opacity: f32,
+    pub show_gizmo: bool,
 }
 ```
 
@@ -216,13 +251,9 @@ fn SceneWithGizmo() -> Element {
     rsx! {
         ThreeView {
             models: vec![
-                ModelConfig {
-                    model_url: Some("model.glb".to_string()),
-                    format: ModelFormat::Glb,
-                    ..Default::default()
-                }
+                ModelConfig::new("model.glb", ModelFormat::Glb)
             ],
-            selection: selection(),
+            selection: Some(selection()),
             on_selection_change: move |sel| {
                 selection.set(sel.clone());
                 gizmo.set(sel.primary().map(|id| Gizmo::new(id)));
@@ -246,16 +277,16 @@ fn SceneWithGizmo() -> Element {
 fn SceneWithPointerEvents() -> Element {
     rsx! {
         ThreeView {
-            id: "main-view",
-            model_url: "model.glb",
+            id: Some("main-view".to_string()),
+            model_url: Some("model.glb".to_string()),
             on_pointer_down: move |event| {
-                if let Some(id) = event.entity_id {
-                    println!("Clicked entity: {:?}", id);
+                if let Some(hit) = event.hit {
+                    println!("Clicked entity: {:?}", hit.entity_id);
                 }
             },
             on_pointer_move: move |event| {
-                if let Some(id) = event.entity_id {
-                    println!("Hovering: {:?}", id);
+                if let Some(hit) = event.hit {
+                    println!("Hovering: {:?}", hit.entity_id);
                 }
             },
         }
