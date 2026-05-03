@@ -842,6 +842,24 @@ pub fn generate_three_js_html(props: &ThreeViewProps) -> String {
                 return null;
             }}
             const control = new THREE.TransformControls(camera, renderer.domElement);
+            
+            // Ensure gizmo handles render on top of everything (including scaled objects)
+            function fixGizmoDepth(gizmo) {{
+                gizmo.traverse(function(child) {{
+                    if (child.material) {{
+                        if (Array.isArray(child.material)) {{
+                            child.material.forEach(function(m) {{
+                                m.depthTest = false;
+                                m.depthWrite = false;
+                            }});
+                        }} else {{
+                            child.material.depthTest = false;
+                            child.material.depthWrite = false;
+                        }}
+                    }}
+                    child.renderOrder = 999;
+                }});
+            }}
             control.addEventListener('dragging-changed', function(event) {{
                 isGizmoDragging = event.value;
                 console.log('[GIZMO] dragging-changed:', event.value, 'attached to:', gizmoTarget);
@@ -999,6 +1017,24 @@ pub fn generate_three_js_html(props: &ThreeViewProps) -> String {
             if (gizmoTarget !== gizmoConfig.target) {{
                 gizmoTarget = gizmoConfig.target;
                 transformControl.attach(targetObj);
+            }}
+            
+            // Ensure gizmo handles always render on top of the object
+            if (transformControl) {{
+                transformControl.traverse(function(child) {{
+                    if (child.material) {{
+                        if (Array.isArray(child.material)) {{
+                            child.material.forEach(function(m) {{
+                                m.depthTest = false;
+                                m.depthWrite = false;
+                            }});
+                        }} else {{
+                            child.material.depthTest = false;
+                            child.material.depthWrite = false;
+                        }}
+                    }}
+                    child.renderOrder = 999;
+                }});
             }}
         }}
         

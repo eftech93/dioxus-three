@@ -814,6 +814,7 @@ fn create_scene(canvas: &web_sys::Element) {
                 
                 // Gizmo group
                 let gizmoGroup = new THREE.Group();
+                gizmoGroup.renderOrder = 999;
                 scene.add(gizmoGroup);
                 
                 // Raycaster for picking
@@ -1237,6 +1238,24 @@ fn create_scene(canvas: &web_sys::Element) {
                         centerBox.userData = {{ axis: 'all', type: 'gizmo', gizmoMode: 'scale' }};
                         gizmoGroup.add(centerBox);
                     }}
+                    
+                    // Ensure gizmo handles always render on top of scaled objects
+                    gizmoGroup.traverse(function(child) {{
+                        if (child.material && child.material.visible !== false) {{
+                            if (Array.isArray(child.material)) {{
+                                child.material.forEach(function(m) {{
+                                    m.depthTest = false;
+                                    m.depthWrite = false;
+                                }});
+                            }} else {{
+                                child.material.depthTest = false;
+                                child.material.depthWrite = false;
+                            }}
+                        }}
+                        if (child !== gizmoGroup) {{
+                            child.renderOrder = 999;
+                        }}
+                    }});
                     
                     // Position gizmo at target
                     updateGizmoPosition();
