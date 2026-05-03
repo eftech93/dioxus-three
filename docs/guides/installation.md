@@ -15,7 +15,7 @@ Add `dioxus-three` to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-dioxus-three = "0.0.3"
+dioxus-three = "0.0.4"
 dioxus = { version = "0.6", features = ["desktop"] }
 ```
 
@@ -24,7 +24,7 @@ dioxus = { version = "0.6", features = ["desktop"] }
 **For Desktop:**
 ```toml
 [dependencies]
-dioxus-three = "0.0.3"
+dioxus-three = "0.0.4"
 dioxus = { version = "0.6", features = ["desktop"] }
 dioxus-desktop = "0.6"
 ```
@@ -32,14 +32,14 @@ dioxus-desktop = "0.6"
 **For Web (WASM):**
 ```toml
 [dependencies]
-dioxus-three = "0.0.3"
+dioxus-three = "0.0.4"
 dioxus = { version = "0.6", features = ["web"] }
 ```
 
 **For Mobile:**
 ```toml
 [dependencies]
-dioxus-three = "0.0.3"
+dioxus-three = "0.0.4"
 dioxus = { version = "0.6", features = ["mobile"] }
 dioxus-mobile = "0.6"
 ```
@@ -125,7 +125,7 @@ If you get compilation errors, ensure you have the correct Dioxus version:
 ```toml
 [dependencies]
 dioxus = { version = "0.6", features = ["desktop"] }
-dioxus-three = "0.0.3"
+dioxus-three = "0.0.4"
 ```
 
 ### Models not loading

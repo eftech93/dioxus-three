@@ -40,7 +40,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-dioxus-three = "0.0.3"
+dioxus-three = "0.0.4"
 dioxus = "0.6"
 ```
 
